@@ -585,7 +585,8 @@ namespace LibHac
                 new KeyValue("secure_boot_key", 0x10, set => set.SecureBootKey),
                 new KeyValue("tsec_key", 0x10, set => set.TsecKey),
                 new KeyValue("device_key", 0x10, set => set.DeviceKey),
-                new KeyValue("sd_seed", 0x10, set => set.SdSeed)
+                new KeyValue("sd_seed", 0x10, set => set.SdSeed),
+                new KeyValue("save_mac_key", 0x10, set => set.SaveMacKey),
             };
 
             for (int slot = 0; slot < 0x20; slot++)
