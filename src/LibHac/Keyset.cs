@@ -17,6 +17,7 @@ namespace LibHac
         public byte[][] KeyblobKeySources { get; } = Util.CreateJaggedArray<byte[][]>(0x20, 0x10);
         public byte[] KeyblobMacKeySource { get; } = new byte[0x10];
         public byte[] MasterKeySource { get; } = new byte[0x10];
+        public byte[][] MasterKekSources { get; } = Util.CreateJaggedArray<byte[][]>(0x20, 0x10);
         public byte[][] MasterKeys { get; } = Util.CreateJaggedArray<byte[][]>(0x20, 0x10);
         public byte[][] Package1Keys { get; } = Util.CreateJaggedArray<byte[][]>(0x20, 0x10);
         public byte[][] Package2Keys { get; } = Util.CreateJaggedArray<byte[][]>(0x20, 0x10);
@@ -45,6 +46,9 @@ namespace LibHac
         public byte[] PerConsoleKeySource { get; } = new byte[0x10];
         public byte[] BisKekSource { get; } = new byte[0x10];
         public byte[][] BisKeySource { get; } = Util.CreateJaggedArray<byte[][]>(3, 0x20);
+        public byte[][] TsecRootKey { get; } = Util.CreateJaggedArray<byte[][]>(0x1A, 0x10);
+        public byte[] SslRsaKek { get; } = new byte[0x10];
+
 
         public byte[] SecureBootKey { get; } = new byte[0x10];
         public byte[] TsecKey { get; } = new byte[0x10];
@@ -141,7 +145,7 @@ namespace LibHac
             bool haveKeyblobMacKeySource = !MasterKeySource.IsEmpty();
             var temp = new byte[0x10];
 
-            for (int i = 0; i < 0x20; i++)
+            for (int i = 0; i < 0x6; i++)
             {
                 if (KeyblobKeySources[i].IsEmpty()) continue;
 
@@ -160,7 +164,7 @@ namespace LibHac
             var expectedCmac = new byte[0x10];
             var counter = new byte[0x10];
 
-            for (int i = 0; i < 0x20; i++)
+            for (int i = 0; i < 0x6; i++)
             {
                 if (KeyblobKeys[i].IsEmpty() || KeyblobMacKeys[i].IsEmpty() || EncryptedKeyblobs[i].IsEmpty())
                 {
@@ -191,7 +195,7 @@ namespace LibHac
 
             bool haveMasterKeySource = !MasterKeySource.IsEmpty();
 
-            for (int i = 0; i < 0x20; i++)
+            for (int i = 0; i < 6; i++)
             {
                 if (Keyblobs[i].IsEmpty()) continue;
 
@@ -202,6 +206,16 @@ namespace LibHac
                 Array.Copy(Keyblobs[i], masterKek, 0x10);
 
                 Crypto.DecryptEcb(masterKek, MasterKeySource, MasterKeys[i], 0x10);
+            }
+
+            for (int i = 0; i < 0x1A; i++)
+            {
+                if (!haveMasterKeySource) continue;
+                if (TsecRootKey[i].IsEmpty()) continue;
+                if (MasterKekSources[i + 6].IsEmpty()) continue;
+
+                Crypto.DecryptEcb(TsecRootKey[i], MasterKekSources[i + 6], masterKek, 0x10);
+                Crypto.DecryptEcb(masterKek, MasterKeySource, MasterKeys[i + 6], 0x10);
             }
         }
 
@@ -343,14 +357,19 @@ namespace LibHac
             AllKeyDict = uniqueKeys.Concat(commonKeys).ToDictionary(k => k.Name, k => k);
         }
 
-        public static Keyset ReadKeyFile(string filename, string titleKeysFilename = null, string consoleKeysFilename = null, IProgressReport logger = null)
+        public static void ReadKeyFile(Keyset keyset, string filename, string titleKeysFilename = null, string consoleKeysFilename = null, IProgressReport logger = null)
         {
-            var keyset = new Keyset();
-
             if (filename != null) ReadMainKeys(keyset, filename, AllKeyDict, logger);
             if (consoleKeysFilename != null) ReadMainKeys(keyset, consoleKeysFilename, AllKeyDict, logger);
             if (titleKeysFilename != null) ReadTitleKeys(keyset, titleKeysFilename, logger);
             keyset.DeriveKeys(logger);
+        }
+
+        public static Keyset ReadKeyFile(string filename, string titleKeysFilename = null, string consoleKeysFilename = null, IProgressReport logger = null)
+        {
+            var keyset = new Keyset();
+
+            ReadKeyFile(filename, titleKeysFilename, consoleKeysFilename, logger);
 
             return keyset;
         }
@@ -521,12 +540,12 @@ namespace LibHac
                 new KeyValue("master_key_source", 0x10, set => set.MasterKeySource),
                 new KeyValue("keyblob_mac_key_source", 0x10, set => set.KeyblobMacKeySource),
                 new KeyValue("eticket_rsa_kek", 0x10, set => set.EticketRsaKek),
+                new KeyValue("ssl_rsa_kek", 0x10, set => set.SslRsaKek),
                 new KeyValue("retail_specific_aes_key_source", 0x10, set => set.RetailSpecificAesKeySource),
                 new KeyValue("per_console_key_source", 0x10, set => set.PerConsoleKeySource),
                 new KeyValue("bis_kek_source", 0x10, set => set.BisKekSource),
                 new KeyValue("save_mac_kek_source", 0x10, set => set.SaveMacKekSource),
                 new KeyValue("save_mac_key_source", 0x10, set => set.SaveMacKeySource),
-                new KeyValue("save_mac_key", 0x10, set => set.SaveMacKey)
             };
 
             for (int slot = 0; slot < 0x20; slot++)
@@ -541,6 +560,13 @@ namespace LibHac
                 keys.Add(new KeyValue($"key_area_key_application_{i:x2}", 0x10, set => set.KeyAreaKeys[i][0]));
                 keys.Add(new KeyValue($"key_area_key_ocean_{i:x2}", 0x10, set => set.KeyAreaKeys[i][1]));
                 keys.Add(new KeyValue($"key_area_key_system_{i:x2}", 0x10, set => set.KeyAreaKeys[i][2]));
+                keys.Add(new KeyValue($"master_kek_source_{i:x2}", 0x10, set => set.MasterKekSources[i]));
+            }
+
+            for (int slot = 0; slot < 0x1A; slot++)
+            {
+                int i = slot;
+                keys.Add(new KeyValue($"tsec_root_key_{i:x2}", 0x1A, set => set.TsecRootKey[i]));
             }
 
             for (int slot = 0; slot < 3; slot++)
