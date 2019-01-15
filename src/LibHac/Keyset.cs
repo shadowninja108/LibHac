@@ -566,7 +566,7 @@ namespace LibHac
             for (int slot = 0; slot < 0x1A; slot++)
             {
                 int i = slot;
-                keys.Add(new KeyValue($"tsec_root_key_{i:x2}", 0x1A, set => set.TsecRootKey[i]));
+                keys.Add(new KeyValue($"tsec_root_key_{i:x2}", 0x10, set => set.TsecRootKey[i]));
             }
 
             for (int slot = 0; slot < 3; slot++)
