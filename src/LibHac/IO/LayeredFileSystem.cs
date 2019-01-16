@@ -77,10 +77,30 @@ namespace LibHac.IO
             return false;
         }
 
+        public DirectoryEntryType GetEntryType(string path)
+        {
+            path = PathTools.Normalize(path);
+
+            foreach (IFileSystem fs in Sources)
+            {
+                if (fs.FileExists(path))
+                {
+                    return DirectoryEntryType.File;
+                }
+
+                if (fs.DirectoryExists(path))
+                {
+                    return DirectoryEntryType.Directory;
+                }
+            }
+
+            throw new FileNotFoundException(path);
+        }
+
         public void Commit() { }
 
         public void CreateDirectory(string path) => throw new NotSupportedException();
-        public void CreateFile(string path, long size) => throw new NotSupportedException();
+        public void CreateFile(string path, long size, CreateFileOptions options) => throw new NotSupportedException();
         public void DeleteDirectory(string path) => throw new NotSupportedException();
         public void DeleteFile(string path) => throw new NotSupportedException();
         public void RenameDirectory(string srcPath, string dstPath) => throw new NotSupportedException();

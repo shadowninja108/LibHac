@@ -23,6 +23,12 @@ namespace LibHac.IO
             return File.GetAttributes(ResolveLocalPath(path));
         }
 
+        public void SetFileAttributes(string path, FileAttributes attributes)
+        {
+            path = PathTools.Normalize(path);
+            File.SetAttributes(ResolveLocalPath(path), attributes);
+        }
+
         public long GetFileSize(string path)
         {
             path = PathTools.Normalize(path);
@@ -36,7 +42,7 @@ namespace LibHac.IO
             Directory.CreateDirectory(ResolveLocalPath(path));
         }
 
-        public void CreateFile(string path, long size)
+        public void CreateFile(string path, long size, CreateFileOptions options)
         {
             path = PathTools.Normalize(path);
             string localPath = ResolveLocalPath(path);
@@ -119,6 +125,24 @@ namespace LibHac.IO
             path = PathTools.Normalize(path);
 
             return File.Exists(ResolveLocalPath(path));
+        }
+
+        public DirectoryEntryType GetEntryType(string path)
+        {
+            path = PathTools.Normalize(path);
+            string localPath = ResolveLocalPath(path);
+
+            if (Directory.Exists(localPath))
+            {
+                return DirectoryEntryType.Directory;
+            }
+
+            if (File.Exists(localPath))
+            {
+                return DirectoryEntryType.File;
+            }
+
+            throw new FileNotFoundException("path");
         }
 
         public void Commit()

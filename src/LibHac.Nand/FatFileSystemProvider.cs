@@ -57,11 +57,29 @@ namespace LibHac.Nand
             return Fs.FileExists(path);
         }
 
+        public DirectoryEntryType GetEntryType(string path)
+        {
+            path = PathTools.Normalize(path);
+            string discUtilsPath = ToDiscUtilsPath(path);
+
+            if (Fs.FileExists(discUtilsPath)) return DirectoryEntryType.File;
+            if (Fs.DirectoryExists(discUtilsPath)) return DirectoryEntryType.Directory;
+
+            throw new FileNotFoundException(path);
+        }
+
         public FileAttributes GetFileAttributes(string path)
         {
             path = ToDiscUtilsPath(PathTools.Normalize(path));
 
             return Fs.GetAttributes(path);
+        }
+
+        public void SetFileAttributes(string path, FileAttributes attributes)
+        {
+            path = ToDiscUtilsPath(PathTools.Normalize(path));
+
+            Fs.SetAttributes(path, attributes);
         }
 
         public long GetFileSize(string path)
@@ -72,9 +90,9 @@ namespace LibHac.Nand
         }
 
         public void Commit() { }
-        
+
         public void CreateDirectory(string path) => throw new NotSupportedException();
-        public void CreateFile(string path, long size) => throw new NotSupportedException();
+        public void CreateFile(string path, long size, CreateFileOptions options) => throw new NotSupportedException();
         public void RenameDirectory(string srcPath, string dstPath) => throw new NotSupportedException();
         public void RenameFile(string srcPath, string dstPath) => throw new NotSupportedException();
 
@@ -86,7 +104,7 @@ namespace LibHac.Nand
 
         internal static string ToDiscUtilsPath(string path)
         {
-            return path.Replace("/", @"\\");
+            return path.Replace("/", @"\");
         }
     }
 }

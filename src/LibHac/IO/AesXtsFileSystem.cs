@@ -31,7 +31,7 @@ namespace LibHac.IO
             BaseFileSystem.CreateDirectory(path);
         }
 
-        public void CreateFile(string path, long size)
+        public void CreateFile(string path, long size, CreateFileOptions options)
         {
             throw new NotImplementedException();
         }
@@ -83,6 +83,11 @@ namespace LibHac.IO
         public bool FileExists(string path)
         {
             return BaseFileSystem.FileExists(path);
+        }
+
+        public DirectoryEntryType GetEntryType(string path)
+        {
+            return BaseFileSystem.GetEntryType(path);
         }
 
         public void Commit()
