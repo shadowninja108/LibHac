@@ -7,6 +7,7 @@ namespace LibHac.Fs
     {
         private IStorage BaseStorage { get; }
         private int BlockSize { get; }
+        private int CacheSize { get; }
         private long _length;
 
         private LinkedList<CacheBlock> Blocks { get; } = new LinkedList<CacheBlock>();
@@ -16,19 +17,25 @@ namespace LibHac.Fs
         {
             BaseStorage = baseStorage;
             BlockSize = blockSize;
+            CacheSize = cacheSize;
             _length = BaseStorage.GetSize();
 
             if (!leaveOpen) ToDispose.Add(BaseStorage);
 
-            for (int i = 0; i < cacheSize; i++)
-            {
-                var block = new CacheBlock { Buffer = new byte[blockSize], Index = -1 };
-                Blocks.AddLast(block);
-            }
+            PopulateBlocks();
         }
 
         public CachedStorage(SectorStorage baseStorage, int cacheSize, bool leaveOpen)
             : this(baseStorage, baseStorage.SectorSize, cacheSize, leaveOpen) { }
+
+        protected void PopulateBlocks()
+        {
+            for (int i = 0; i < CacheSize; i++)
+            {
+                var block = new CacheBlock { Buffer = new byte[BlockSize], Index = -1 };
+                Blocks.AddLast(block);
+            }
+        }
 
         protected override void ReadImpl(Span<byte> destination, long offset)
         {
@@ -116,6 +123,9 @@ namespace LibHac.Fs
 
                 return node.Value;
             }
+
+            if (Blocks.Count == 0)
+                PopulateBlocks();
 
             node = Blocks.Last;
             FlushBlock(node.Value);
