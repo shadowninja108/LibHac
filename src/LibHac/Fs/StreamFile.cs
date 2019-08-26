@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.IO;
 
 #if !STREAM_SPAN
@@ -23,17 +24,7 @@ namespace LibHac.Fs
 
         public override int Read(Span<byte> destination, long offset, ReadOption options)
         {
-#if STREAM_SPAN
-            lock (Locker)
-            {
-                if (BaseStream.Position != offset)
-                {
-                    BaseStream.Position = offset;
-                }
 
-                return BaseStream.Read(destination);
-            }
-#else
             byte[] buffer = ArrayPool<byte>.Shared.Rent(destination.Length);
             try
             {
@@ -51,9 +42,14 @@ namespace LibHac.Fs
                 new Span<byte>(buffer, 0, destination.Length).CopyTo(destination);
 
                 return bytesRead;
+            } catch(IOException e)
+            {
+                if (!e.Message.Contains("Incorrect function"))
+                    throw e;
+
+                return Read(destination, offset, options);
             }
             finally { ArrayPool<byte>.Shared.Return(buffer); }
-#endif
         }
 
         public override void Write(ReadOnlySpan<byte> source, long offset, WriteOption options)

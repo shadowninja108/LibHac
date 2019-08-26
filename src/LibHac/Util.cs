@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -518,8 +519,14 @@ namespace LibHac
 
             return keyGeneration - 1;
         }
-    }
 
+        public static void RemoveAll<T, K>(this Dictionary<T, K> d, IEnumerable<T> r)
+        {
+            d.Keys.Except(r).ToList()
+                .ForEach(key => d.Remove(key));
+        }
+
+    }
     public class ByteArray128BitComparer : EqualityComparer<byte[]>
     {
         public override bool Equals(byte[] first, byte[] second)
