@@ -1,5 +1,5 @@
 ﻿using LibHac;
-using LibHac.Fs;
+using LibHac.FsSystem;
 
 namespace hactoolnet
 {
@@ -16,6 +16,7 @@ namespace hactoolnet
         public string TitleKeyFile;
         public string ConsoleKeyFile;
         public string AccessLog;
+        public string ResultLog;
         public string[] SectionOut = new string[4];
         public string[] SectionOutDir = new string[4];
         public string HeaderOut;
