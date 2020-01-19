@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Text;
+using LibHac.Crypto;
 using LibHac.Fs;
 
 namespace LibHac
@@ -37,7 +38,7 @@ namespace LibHac
         public int BackupAreaStartPage { get; set; }
         public byte KekIndex { get; set; }
         public byte TitleKeyDecIndex { get; set; }
-        public GameCardSize GameCardSize { get; set; }
+        public GameCardSizeInternal GameCardSize { get; set; }
         public byte CardHeaderVersion { get; set; }
         public GameCardAttribute Flags { get; set; }
         public ulong PackageId { get; set; }
@@ -83,24 +84,24 @@ namespace LibHac
                 byte[] sigData = reader.ReadBytes(SignatureSize);
                 reader.BaseStream.Position = SignatureSize + 4;
 
-                SignatureValidity = Crypto.Rsa2048Pkcs1Verify(sigData, Signature, _xciHeaderPubk);
+                SignatureValidity = CryptoOld.Rsa2048Pkcs1Verify(sigData, Signature, _xciHeaderPubk);
 
                 RomAreaStartPage = reader.ReadInt32();
                 BackupAreaStartPage = reader.ReadInt32();
                 byte keyIndex = reader.ReadByte();
                 KekIndex = (byte)(keyIndex >> 4);
                 TitleKeyDecIndex = (byte)(keyIndex & 7);
-                GameCardSize = (GameCardSize)reader.ReadByte();
+                GameCardSize = (GameCardSizeInternal)reader.ReadByte();
                 CardHeaderVersion = reader.ReadByte();
                 Flags = (GameCardAttribute)reader.ReadByte();
                 PackageId = reader.ReadUInt64();
                 ValidDataEndPage = reader.ReadInt64();
-                AesCbcIv = reader.ReadBytes(Crypto.Aes128Size);
+                AesCbcIv = reader.ReadBytes(CryptoOld.Aes128Size);
                 Array.Reverse(AesCbcIv);
                 RootPartitionOffset = reader.ReadInt64();
                 RootPartitionHeaderSize = reader.ReadInt64();
-                RootPartitionHeaderHash = reader.ReadBytes(Crypto.Sha256DigestSize);
-                InitialDataHash = reader.ReadBytes(Crypto.Sha256DigestSize);
+                RootPartitionHeaderHash = reader.ReadBytes(Sha256.DigestSize);
+                InitialDataHash = reader.ReadBytes(Sha256.DigestSize);
                 SelSec = reader.ReadInt32();
                 SelT1Key = reader.ReadInt32();
                 SelKey = reader.ReadInt32();
@@ -110,7 +111,7 @@ namespace LibHac
                 {
                     byte[] encHeader = reader.ReadBytes(EncryptedHeaderSize);
                     var decHeader = new byte[EncryptedHeaderSize];
-                    Crypto.DecryptCbc(keyset.XciHeaderKey, AesCbcIv, encHeader, decHeader, EncryptedHeaderSize);
+                    CryptoOld.DecryptCbc(keyset.XciHeaderKey, AesCbcIv, encHeader, decHeader, EncryptedHeaderSize);
 
                     using (var decreader = new BinaryReader(new MemoryStream(decHeader)))
                     {
@@ -128,10 +129,16 @@ namespace LibHac
                     }
                 }
 
-                ImageHash = Crypto.ComputeSha256(sigData, 0, sigData.Length);
+                ImageHash = new byte[Sha256.DigestSize];
+                Sha256.GenerateSha256Hash(sigData, ImageHash);
 
                 reader.BaseStream.Position = RootPartitionOffset;
-                PartitionFsHeaderValidity = Crypto.CheckMemoryHashTable(reader.ReadBytes((int)RootPartitionHeaderSize), RootPartitionHeaderHash, 0, (int)RootPartitionHeaderSize);
+                byte[] headerBytes = reader.ReadBytes((int)RootPartitionHeaderSize);
+
+                Span<byte> actualHeaderHash = stackalloc byte[Sha256.DigestSize];
+                Sha256.GenerateSha256Hash(headerBytes, actualHeaderHash);
+
+                PartitionFsHeaderValidity = Util.SpansEqual(RootPartitionHeaderHash, actualHeaderHash) ? Validity.Valid : Validity.Invalid;
             }
         }
     }

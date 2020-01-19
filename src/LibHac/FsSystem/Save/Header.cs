@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using LibHac.Crypto;
 using LibHac.Fs;
 
 namespace LibHac.FsSystem.Save
@@ -81,7 +82,10 @@ namespace LibHac.FsSystem.Save
 
             MasterHash = storage.Slice(Layout.IvfcMasterHashOffsetA, Layout.IvfcMasterHashSize);
 
-            HeaderHashValidity = Crypto.CheckMemoryHashTable(Data, Layout.Hash, 0x300, 0x3d00);
+            Span<byte> actualHeaderHash = stackalloc byte[Sha256.DigestSize];
+            Sha256.GenerateSha256Hash(Data.AsSpan(0x300, 0x3d00), actualHeaderHash);
+
+            HeaderHashValidity = Util.SpansEqual(Layout.Hash, actualHeaderHash) ? Validity.Valid : Validity.Invalid;
             SignatureValidity = ValidateSignature(keyset);
         }
 
@@ -89,7 +93,7 @@ namespace LibHac.FsSystem.Save
         {
             var calculatedCmac = new byte[0x10];
 
-            Crypto.CalculateAesCmac(keyset.SaveMacKey, Data, 0x100, calculatedCmac, 0, 0x200);
+            CryptoOld.CalculateAesCmac(keyset.SaveMacKey, Data, 0x100, calculatedCmac, 0, 0x200);
 
             return Util.ArraysEqual(calculatedCmac, Cmac) ? Validity.Valid : Validity.Invalid;
         }
@@ -279,16 +283,5 @@ namespace LibHac.FsSystem.Save
 
             return new Guid(b);
         }
-    }
-
-    public enum SaveDataType : byte
-    {
-        SystemSaveData = 0,
-        SaveData = 1,
-        BcatDeliveryCacheStorage = 2,
-        DeviceSaveData = 3,
-        TemporaryStorage = 4,
-        CacheStorage = 5,
-        BcatSystemStorage = 6
     }
 }

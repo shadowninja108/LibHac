@@ -45,6 +45,87 @@ namespace LibHac.Common
             return i;
         }
 
+        public static int Compare(ReadOnlySpan<byte> s1, ReadOnlySpan<byte> s2)
+        {
+            int i = 0;
+
+            while (true)
+            {
+                int c1 = ((uint)i < (uint)s1.Length ? s1[i] : 0);
+                int c2 = ((uint)i < (uint)s2.Length ? s2[i] : 0);
+
+                if (c1 != c2)
+                    return c1 - c2;
+
+                if (c1 == 0)
+                    return 0;
+
+                i++;
+            }
+        }
+
+        public static int Compare(ReadOnlySpan<byte> s1, ReadOnlySpan<byte> s2, int maxLen)
+        {
+            for (int i = 0; i < maxLen; i++)
+            {
+                int c1 = ((uint)i < (uint)s1.Length ? s1[i] : 0);
+                int c2 = ((uint)i < (uint)s2.Length ? s2[i] : 0);
+
+                if (c1 != c2)
+                    return c1 - c2;
+
+                if (c1 == 0)
+                    return 0;
+            }
+
+            return 0;
+        }
+
+        public static int CompareCaseInsensitive(ReadOnlySpan<byte> s1, ReadOnlySpan<byte> s2)
+        {
+            int i = 0;
+
+            while (true)
+            {
+                int c1 = ((uint)i < (uint)s1.Length ? ToLowerAsciiInvariant(s1[i]) : 0);
+                int c2 = ((uint)i < (uint)s2.Length ? ToLowerAsciiInvariant(s2[i]) : 0);
+
+                if (c1 != c2)
+                    return c1 - c2;
+
+                if (c1 == 0)
+                    return 0;
+
+                i++;
+            }
+        }
+
+        public static int CompareCaseInsensitive(ReadOnlySpan<byte> s1, ReadOnlySpan<byte> s2, int maxLen)
+        {
+            for (int i = 0; i < maxLen; i++)
+            {
+                int c1 = ((uint)i < (uint)s1.Length ? ToLowerAsciiInvariant(s1[i]) : 0);
+                int c2 = ((uint)i < (uint)s2.Length ? ToLowerAsciiInvariant(s2[i]) : 0);
+
+                if (c1 != c2)
+                    return c1 - c2;
+
+                if (c1 == 0)
+                    return 0;
+            }
+
+            return 0;
+        }
+
+        private static byte ToLowerAsciiInvariant(byte c)
+        {
+            if ((uint)(c - 'A') <= 'Z' - 'A')
+            {
+                c = (byte)(c | 0x20);
+            }
+            return c;
+        }
+
         /// <summary>
         /// Concatenates 2 byte strings.
         /// </summary>
@@ -80,11 +161,7 @@ namespace LibHac.Common
 
         public static string Utf8ToString(ReadOnlySpan<byte> value)
         {
-#if STRING_SPAN
             return Encoding.UTF8.GetString(value);
-#else
-            return Encoding.UTF8.GetString(value.ToArray());
-#endif
         }
 
         public static string Utf8ZToString(ReadOnlySpan<byte> value)

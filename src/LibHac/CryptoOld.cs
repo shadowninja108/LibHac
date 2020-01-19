@@ -6,32 +6,13 @@ using LibHac.FsSystem;
 
 namespace LibHac
 {
-    public static class Crypto
+    public static class CryptoOld
     {
         internal const int Aes128Size = 0x10;
-        internal const int Sha256DigestSize = 0x20;
-
-        public static Validity CheckMemoryHashTable(byte[] data, byte[] hash, int offset, int count)
-        {
-            Validity comp;
-            using (SHA256 sha = SHA256.Create())
-            {
-                comp = Util.ArraysEqual(hash, sha.ComputeHash(data, offset, count)) ? Validity.Valid : Validity.Invalid;
-            }
-            return comp;
-        }
-
-        public static byte[] ComputeSha256(byte[] data, int offset, int count)
-        {
-            using (SHA256 sha = SHA256.Create())
-            {
-                return sha.ComputeHash(data, offset, count);
-            }
-        }
 
         public static void DecryptEcb(byte[] key, byte[] src, int srcIndex, byte[] dest, int destIndex, int length)
         {
-            using (Aes aes = Aes.Create())
+            using (var aes = Aes.Create())
             {
                 if (aes == null) throw new CryptographicException("Unable to create AES object");
                 aes.Key = key;
@@ -46,7 +27,7 @@ namespace LibHac
 
         public static void EncryptEcb(byte[] key, byte[] src, int srcIndex, byte[] dest, int destIndex, int length)
         {
-            using (Aes aes = Aes.Create())
+            using (var aes = Aes.Create())
             {
                 if (aes == null) throw new CryptographicException("Unable to create AES object");
                 aes.Key = key;
@@ -61,7 +42,7 @@ namespace LibHac
 
         public static void DecryptCbc(byte[] key, byte[] iv, byte[] src, int srcIndex, byte[] dest, int destIndex, int length)
         {
-            using (Aes aes = Aes.Create())
+            using (var aes = Aes.Create())
             {
                 if (aes == null) throw new CryptographicException("Unable to create AES object");
                 aes.Key = key;
@@ -77,7 +58,7 @@ namespace LibHac
 
         public static void EncryptCbc(byte[] key, byte[] iv, byte[] src, int srcIndex, byte[] dest, int destIndex, int length)
         {
-            using (Aes aes = Aes.Create())
+            using (var aes = Aes.Create())
             {
                 if (aes == null) throw new CryptographicException("Unable to create AES object");
                 aes.Key = key;
@@ -159,7 +140,7 @@ namespace LibHac
 
         public static Validity Rsa2048Pkcs1Verify(byte[] data, byte[] signature, byte[] modulus)
         {
-            using (RSA rsa = RSA.Create())
+            using (var rsa = RSA.Create())
             {
                 rsa.ImportParameters(new RSAParameters { Exponent = new byte[] { 1, 0, 1 }, Modulus = modulus });
 
@@ -171,20 +152,7 @@ namespace LibHac
 
         public static Validity Rsa2048PssVerify(byte[] data, byte[] signature, byte[] modulus)
         {
-#if NETFRAMEWORK
-            if (Compatibility.Env.IsMono)
-            {
-                return Compatibility.Rsa.Rsa2048PssVerifyMono(data, signature, modulus)
-                    ? Validity.Valid
-                    : Validity.Invalid;
-            }
-#endif
-
-#if USE_RSA_CNG
-            using (RSA rsa = new RSACng())
-#else
-            using (RSA rsa = RSA.Create())
-#endif
+            using (var rsa = RSA.Create())
             {
                 rsa.ImportParameters(new RSAParameters { Exponent = new byte[] { 1, 0, 1 }, Modulus = modulus });
 
@@ -196,19 +164,15 @@ namespace LibHac
 
         public static byte[] DecryptTitleKey(byte[] titleKeyblock, RSAParameters rsaParams)
         {
-            // todo: Does this work on Mono?
-#if USE_RSA_CNG
-            RSA rsa = new RSACng();
-#else
-            RSA rsa = RSA.Create();
-#endif
+            var rsa = RSA.Create();
+
             rsa.ImportParameters(rsaParams);
             return rsa.Decrypt(titleKeyblock, RSAEncryptionPadding.OaepSHA256);
         }
 
         private static RSAParameters RecoverRsaParameters(BigInteger n, BigInteger e, BigInteger d)
         {
-            using (RandomNumberGenerator rng = RandomNumberGenerator.Create())
+            using (var rng = RandomNumberGenerator.Create())
             {
                 BigInteger k = d * e - 1;
 

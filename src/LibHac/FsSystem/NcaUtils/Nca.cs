@@ -36,9 +36,9 @@ namespace LibHac.FsSystem.NcaUtils
             }
 
             byte[] encryptedKey = Header.GetEncryptedKey(index).ToArray();
-            var decryptedKey = new byte[Crypto.Aes128Size];
+            var decryptedKey = new byte[CryptoOld.Aes128Size];
 
-            Crypto.DecryptEcb(keyAreaKey, encryptedKey, decryptedKey, Crypto.Aes128Size);
+            CryptoOld.DecryptEcb(keyAreaKey, encryptedKey, decryptedKey, CryptoOld.Aes128Size);
 
             return decryptedKey;
         }
@@ -48,9 +48,11 @@ namespace LibHac.FsSystem.NcaUtils
             int keyRevision = Util.GetMasterKeyRevision(Header.KeyGeneration);
             byte[] titleKek = Keyset.TitleKeks[keyRevision];
 
-            if (Keyset.ExternalKeySet.Get(new RightsId(Header.RightsId), out AccessKey accessKey).IsFailure())
+            var rightsId = new RightsId(Header.RightsId);
+
+            if (Keyset.ExternalKeySet.Get(rightsId, out AccessKey accessKey).IsFailure())
             {
-                throw new MissingKeyException("Missing NCA title key.", Header.RightsId.ToString(), KeyType.Title);
+                throw new MissingKeyException("Missing NCA title key.", rightsId.ToString(), KeyType.Title);
             }
 
             if (titleKek.IsEmpty())
@@ -60,9 +62,9 @@ namespace LibHac.FsSystem.NcaUtils
             }
 
             byte[] encryptedKey = accessKey.Value.ToArray();
-            var decryptedKey = new byte[Crypto.Aes128Size];
+            var decryptedKey = new byte[CryptoOld.Aes128Size];
 
-            Crypto.DecryptEcb(titleKek, encryptedKey, decryptedKey, Crypto.Aes128Size);
+            CryptoOld.DecryptEcb(titleKek, encryptedKey, decryptedKey, CryptoOld.Aes128Size);
 
             return decryptedKey;
         }

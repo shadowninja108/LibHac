@@ -103,7 +103,15 @@ namespace hactoolnet
                 {
                     if (signNeeded)
                     {
-                        save.Commit(ctx.Keyset).ThrowIfFailure();
+                        if (save.Commit(ctx.Keyset).IsSuccess())
+                        {
+                            ctx.Logger.LogMessage($"Successfully signed save file with key {ctx.Keyset.SaveMacKey.ToHexString()}");
+                        }
+                        else
+                        {
+                            ctx.Logger.LogMessage("Unable to sign save file. Do you have all the required keys?");
+                        }
+
                         signNeeded = false;
                     }
                 }
@@ -119,7 +127,7 @@ namespace hactoolnet
                 {
                     if (save.Commit(ctx.Keyset).IsSuccess())
                     {
-                        ctx.Logger.LogMessage("Successfully signed save file");
+                        ctx.Logger.LogMessage($"Successfully signed save file with key {ctx.Keyset.SaveMacKey.ToHexString()}");
                     }
                     else
                     {
@@ -138,7 +146,7 @@ namespace hactoolnet
                     }
                 }
 
-                ctx.Logger.LogMessage(save.Print());
+                ctx.Logger.LogMessage(save.Print(ctx.Keyset));
                 //ctx.Logger.LogMessage(PrintFatLayout(save.SaveDataFileSystemCore));
 
                 fs.Unmount("save");
@@ -307,7 +315,7 @@ namespace hactoolnet
             }
         }
 
-        private static string Print(this SaveDataFileSystem save)
+        private static string Print(this SaveDataFileSystem save, Keyset keyset)
         {
             int colLen = 25;
             var sb = new StringBuilder();
@@ -316,6 +324,7 @@ namespace hactoolnet
             save.GetFreeSpaceSize(out long freeSpace, "").ThrowIfFailure();
 
             sb.AppendLine("Savefile:");
+            PrintItem(sb, colLen, "CMAC Key Used:", keyset.SaveMacKey);
             PrintItem(sb, colLen, $"CMAC Signature{save.Header.SignatureValidity.GetValidityString()}:", save.Header.Cmac);
             PrintItem(sb, colLen, "Title ID:", $"{save.Header.ExtraData.TitleId:x16}");
             PrintItem(sb, colLen, "User ID:", save.Header.ExtraData.UserId);

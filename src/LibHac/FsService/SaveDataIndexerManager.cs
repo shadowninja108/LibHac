@@ -1,5 +1,4 @@
-﻿using System;
-using System.Threading;
+﻿using System.Threading;
 using LibHac.Fs;
 
 namespace LibHac.FsService
@@ -11,6 +10,7 @@ namespace LibHac.FsService
 
         private IndexerHolder _bisIndexer = new IndexerHolder(new object());
         private IndexerHolder _sdCardIndexer = new IndexerHolder(new object());
+        private IndexerHolder _tempIndexer = new IndexerHolder(new object());
         private IndexerHolder _safeIndexer = new IndexerHolder(new object());
         private IndexerHolder _properSystemIndexer = new IndexerHolder(new object());
 
@@ -50,8 +50,16 @@ namespace LibHac.FsService
                     reader = new SaveDataIndexerReader(_sdCardIndexer.Indexer, _sdCardIndexer.Locker);
                     return Result.Success;
 
-                case SaveDataSpaceId.TemporaryStorage:
-                    throw new NotImplementedException();
+                case SaveDataSpaceId.Temporary:
+                    Monitor.Enter(_tempIndexer.Locker);
+
+                    if (!_tempIndexer.IsInitialized)
+                    {
+                        _tempIndexer.Indexer = new SaveDataIndexerLite();
+                    }
+
+                    reader = new SaveDataIndexerReader(_tempIndexer.Indexer, _tempIndexer.Locker);
+                    return Result.Success;
 
                 case SaveDataSpaceId.ProperSystem:
                     Monitor.Enter(_safeIndexer.Locker);
@@ -64,12 +72,12 @@ namespace LibHac.FsService
                     reader = new SaveDataIndexerReader(_safeIndexer.Indexer, _safeIndexer.Locker);
                     return Result.Success;
 
-                case SaveDataSpaceId.Safe:
+                case SaveDataSpaceId.SafeMode:
                     Monitor.Enter(_properSystemIndexer.Locker);
 
                     if (!_properSystemIndexer.IsInitialized)
                     {
-                        _properSystemIndexer.Indexer = new SaveDataIndexer(FsClient, "saveDataIxrDbSf", SaveDataSpaceId.Safe, SaveDataId);
+                        _properSystemIndexer.Indexer = new SaveDataIndexer(FsClient, "saveDataIxrDbSf", SaveDataSpaceId.SafeMode, SaveDataId);
                     }
 
                     reader = new SaveDataIndexerReader(_properSystemIndexer.Indexer, _properSystemIndexer.Locker);

@@ -27,6 +27,16 @@ namespace LibHac.Common
             _buffer = Encoding.UTF8.GetBytes(value);
         }
 
+        public U8Span Slice(int start)
+        {
+            return new U8Span(_buffer.Slice(start));
+        }
+
+        public U8Span Slice(int start, int length)
+        {
+            return new U8Span(_buffer.Slice(start, length));
+        }
+
         public static implicit operator ReadOnlySpan<byte>(U8Span value) => value.Value;
 
         public static explicit operator string(U8Span value) => value.ToString();
@@ -34,7 +44,7 @@ namespace LibHac.Common
 
         public override string ToString()
         {
-            return StringUtils.Utf8ToString(_buffer);
+            return StringUtils.Utf8ZToString(_buffer);
         }
 
         public bool IsNull() => _buffer == default;

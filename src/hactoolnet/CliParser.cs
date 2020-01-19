@@ -7,7 +7,7 @@ namespace hactoolnet
 {
     internal static class CliParser
     {
-        private static readonly CliOption[] CliOptions =
+        private static CliOption[] GetCliOptions() => new[]
         {
             new CliOption("custom", 0, (o, a) => o.RunCustom = true),
             new CliOption("intype", 't', 1, (o, a) => o.InFileType = ParseFileType(a[0])),
@@ -60,6 +60,7 @@ namespace hactoolnet
             new CliOption("hashedfs", 0, (o, a) => o.BuildHfs = true),
             new CliOption("title", 1, (o, a) => o.TitleId = ParseTitleId(a[0])),
             new CliOption("bench", 1, (o, a) => o.BenchType = a[0]),
+            new CliOption("cpufreq", 1, (o, a) => o.CpuFrequencyGhz = ParseDouble(a[0])),
 
             new CliOption("replacefile", 2, (o, a) =>
             {
@@ -72,6 +73,8 @@ namespace hactoolnet
         {
             var options = new Options();
             bool inputSpecified = false;
+
+            CliOption[] cliOptions = GetCliOptions();
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -98,7 +101,7 @@ namespace hactoolnet
                     continue;
                 }
 
-                CliOption option = CliOptions.FirstOrDefault(x => x.Long == arg || x.Short == arg);
+                CliOption option = cliOptions.FirstOrDefault(x => x.Long == arg || x.Short == arg);
                 if (option == null)
                 {
                     PrintWithUsage($"Unknown option {args[i]}");
@@ -129,12 +132,30 @@ namespace hactoolnet
 
         private static FileType ParseFileType(string input)
         {
-            if (!Enum.TryParse(input, true, out FileType type))
+            switch (input.ToLower())
             {
-                PrintWithUsage("Specified type is invalid.");
+                case "nca": return FileType.Nca;
+                case "pfs0": return FileType.Pfs0;
+                case "pfsbuild": return FileType.PfsBuild;
+                case "nsp": return FileType.Nsp;
+                case "romfs": return FileType.Romfs;
+                case "romfsbuild": return FileType.RomfsBuild;
+                case "nax0": return FileType.Nax0;
+                case "xci": return FileType.Xci;
+                case "switchfs": return FileType.SwitchFs;
+                case "save": return FileType.Save;
+                case "keygen": return FileType.Keygen;
+                case "pk11": return FileType.Pk11;
+                case "pk21": return FileType.Pk21;
+                case "kip1": return FileType.Kip1;
+                case "ini1": return FileType.Ini1;
+                case "ndv0": return FileType.Ndv0;
+                case "bench": return FileType.Bench;
             }
 
-            return type;
+            PrintWithUsage("Specified type is invalid.");
+
+            return default;
         }
 
         private static ulong ParseTitleId(string input)
@@ -150,6 +171,16 @@ namespace hactoolnet
             }
 
             return id;
+        }
+
+        private static double ParseDouble(string input)
+        {
+            if (!double.TryParse(input, out double value))
+            {
+                PrintWithUsage($"Could not parse value \"{input}\"");
+            }
+
+            return value;
         }
 
         private static void PrintWithUsage(string toPrint)
@@ -241,6 +272,10 @@ namespace hactoolnet
             sb.AppendLine("  --listfiles          List files in save file.");
             sb.AppendLine("  --repack <dir>       Replaces the contents of the save data with the specified directory.");
             sb.AppendLine("  --replacefile <filename in save> <file> Replaces a file in the save data");
+            sb.AppendLine("NAX0 options:");
+            sb.AppendLine("  --sdseed <seed>      Set console unique seed for SD card NAX0 encryption.");
+            sb.AppendLine("  --sdpath <path>      Set relative path for NAX0 key derivation (ex: /registered/000000FF/cafebabecafebabecafebabecafebabe.nca).");
+            sb.AppendLine("  --plaintext          Specify file path to save decrypted contents.");
             sb.AppendLine("NDV0 (Delta) options:");
             sb.AppendLine("                       Input delta patch can be a delta NCA file or a delta fragment file.");
             sb.AppendLine("  --basefile <file>    Specify base file path.");
@@ -260,6 +295,7 @@ namespace hactoolnet
                 ArgsNeeded = argsNeeded;
                 Assigner = assigner;
             }
+
             public CliOption(string longName, int argsNeeded, Action<Options, string[]> assigner)
             {
                 Long = longName;

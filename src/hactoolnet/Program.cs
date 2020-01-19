@@ -68,7 +68,7 @@ namespace hactoolnet
                         logWriter = new StreamWriter(ctx.Options.AccessLog);
                         var accessLog = new TextWriterAccessLog(logWriter);
 
-                        ctx.Horizon.Fs.SetLocalAccessLogMode(LocalAccessLogMode.All);
+                        ctx.Horizon.Fs.SetAccessLogTarget(AccessLogTarget.All);
                         ctx.Horizon.Fs.SetGlobalAccessLogMode(GlobalAccessLogMode.Log);
 
                         ctx.Horizon.Fs.SetAccessLogObject(accessLog);
@@ -126,6 +126,7 @@ namespace hactoolnet
                     ProcessFsBuild.ProcessRomFs(ctx);
                     break;
                 case FileType.Nax0:
+                    ProcessNax0.Process(ctx);
                     break;
                 case FileType.SwitchFs:
                     ProcessSwitchFs.Process(ctx);

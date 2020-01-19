@@ -20,7 +20,7 @@ namespace LibHac
 
         private static object InitializeJaggedArray(Type type, int index, int[] lengths)
         {
-            Array array = Array.CreateInstance(type, lengths[index]);
+            var array = Array.CreateInstance(type, lengths[index]);
 
             Type elementType = type.GetElementType();
             if (elementType == null) return array;
@@ -110,11 +110,7 @@ namespace LibHac
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string GetUtf8String(ReadOnlySpan<byte> value)
         {
-#if STRING_SPAN
             return Encoding.UTF8.GetString(value);
-#else
-            return Encoding.UTF8.GetString(value.ToArray());
-#endif
         }
 
         public static string GetUtf8StringNullTerminated(ReadOnlySpan<byte> value)
@@ -124,11 +120,7 @@ namespace LibHac
 
             value = value.Slice(0, i);
 
-#if STRING_SPAN
             return Encoding.UTF8.GetString(value);
-#else
-            return Encoding.UTF8.GetString(value.ToArray());
-#endif
         }
 
         public static bool IsEmpty(this byte[] array) => ((ReadOnlySpan<byte>)array).IsEmpty();
@@ -146,13 +138,13 @@ namespace LibHac
             return true;
         }
 
-        public static void XorArrays(Span<byte> transformData, Span<byte> xorData)
+        public static void XorArrays(Span<byte> transformData, ReadOnlySpan<byte> xorData)
         {
             int sisdStart = 0;
             if (Vector.IsHardwareAccelerated)
             {
                 Span<Vector<byte>> dataVec = MemoryMarshal.Cast<byte, Vector<byte>>(transformData);
-                Span<Vector<byte>> xorVec = MemoryMarshal.Cast<byte, Vector<byte>>(xorData);
+                ReadOnlySpan<Vector<byte>> xorVec = MemoryMarshal.Cast<byte, Vector<byte>>(xorData);
                 sisdStart = dataVec.Length * Vector<byte>.Count;
 
                 for (int i = 0; i < dataVec.Length; i++)
@@ -164,6 +156,33 @@ namespace LibHac
             for (int i = sisdStart; i < transformData.Length; i++)
             {
                 transformData[i] ^= xorData[i];
+            }
+        }
+
+        public static void XorArrays(Span<byte> output, ReadOnlySpan<byte> input1, ReadOnlySpan<byte> input2)
+        {
+            int length = Math.Min(input1.Length, input2.Length);
+
+            int sisdStart = 0;
+            if (Vector.IsHardwareAccelerated)
+            {
+                int lengthVec = length / Vector<byte>.Count;
+
+                Span<Vector<byte>> outputVec = MemoryMarshal.Cast<byte, Vector<byte>>(output);
+                ReadOnlySpan<Vector<byte>> input1Vec = MemoryMarshal.Cast<byte, Vector<byte>>(input1);
+                ReadOnlySpan<Vector<byte>> input2Vec = MemoryMarshal.Cast<byte, Vector<byte>>(input2);
+
+                sisdStart = lengthVec * Vector<byte>.Count;
+
+                for (int i = 0; i < lengthVec; i++)
+                {
+                    outputVec[i] = input1Vec[i] ^ input2Vec[i];
+                }
+            }
+
+            for (int i = sisdStart; i < length; i++)
+            {
+                output[i] = (byte)(input1[i] ^ input2[i]);
             }
         }
 

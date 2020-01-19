@@ -112,6 +112,23 @@ namespace LibHac.FsService
             }
         }
 
+        public Result Reset()
+        {
+            lock (Locker)
+            {
+                IsKvdbLoaded = false;
+
+                Result rc = FsClient.DeleteSaveData(SaveDataId);
+
+                if (rc.IsSuccess() || rc == ResultFs.TargetNotFound)
+                {
+                    Version++;
+                }
+
+                return rc;
+            }
+        }
+
         public Result Add(out ulong saveDataId, ref SaveDataAttribute key)
         {
             saveDataId = default;
@@ -525,7 +542,7 @@ namespace LibHac.FsService
                 {
                     // New key was inserted before the iterator's position
                     // increment the position to compensate
-                    if(reader.Position >= index)
+                    if (reader.Position >= index)
                     {
                         reader.Position++;
                     }
@@ -546,6 +563,7 @@ namespace LibHac.FsService
 
         private void CloseReader(SaveDataInfoReader reader)
         {
+            // ReSharper disable once RedundantAssignment
             bool wasRemoved = OpenedReaders.Remove(reader);
 
             Debug.Assert(wasRemoved);
