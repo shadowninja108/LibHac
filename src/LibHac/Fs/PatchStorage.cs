@@ -17,8 +17,13 @@ namespace LibHac.Fs
             Patches = new Dictionary<Range, byte[]>();
         }
 
-        public override void Flush() => BaseStorage.Flush();
-        public override long GetSize() => BaseStorage.GetSize();
+        protected override Result FlushImpl() => BaseStorage.Flush();
+        protected override Result GetSizeImpl(out long size)
+        {
+            Result rc = BaseStorage.GetSize(out long localSize);
+            size = localSize;
+            return rc;
+        }
 
         public void AddPatch(Span<byte> data, long offset)
         {
@@ -46,7 +51,7 @@ namespace LibHac.Fs
             }
         }
 
-        protected override void ReadImpl(Span<byte> destination, long offset)
+        protected override Result ReadImpl(long offset, Span<byte> destination)
         {
             IEnumerable<Range> overlapping = Patches.Keys.Containing(offset);
             foreach (Range r in overlapping)
@@ -56,14 +61,19 @@ namespace LibHac.Fs
                 new Span<byte>(Patches[r], relativeStart, relativeEnd - relativeStart).CopyTo(destination.Slice(relativeStart));
             }
             foreach (Range r in overlapping.Mask())
-                BaseStorage.Read(destination.Slice((int)(r.Start - offset), (int)r.Length), r.Start);
+                BaseStorage.Read(r.Start, destination.Slice((int)(r.Start - offset), (int)r.Length));
+
+            return Result.Success;
         }
 
-        protected override void WriteImpl(ReadOnlySpan<byte> source, long offset)
+        protected override Result WriteImpl(long offset, ReadOnlySpan<byte> source)
         {
             Span<byte> data = new byte[source.Length];
             source.CopyTo(data);
             AddPatch(data, offset);
+            return Result.Success;
         }
+
+        protected override Result SetSizeImpl(long size) => BaseStorage.SetSize(size);
     }
 }
