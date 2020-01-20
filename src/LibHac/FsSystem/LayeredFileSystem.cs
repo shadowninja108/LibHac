@@ -23,7 +23,7 @@ namespace LibHac.FsSystem
             foreach (IFileSystem fs in Sources)
             {
                 Result rc = fs.GetEntryType(out DirectoryEntryType entryType, path);
-                if (rc.IsFailure()) return rc;
+                if (rc.IsFailure()) continue;
 
                 if (entryType == DirectoryEntryType.File && dirs.Count == 0)
                 {
@@ -51,7 +51,7 @@ namespace LibHac.FsSystem
             foreach (IFileSystem fs in Sources)
             {
                 Result rc = fs.GetEntryType(out DirectoryEntryType type, path);
-                if (rc.IsFailure()) return rc;
+                if (rc.IsFailure()) continue;
 
                 if (type == DirectoryEntryType.File)
                 {
