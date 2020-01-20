@@ -1,5 +1,8 @@
 ﻿using System;
 using System.IO;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using LibHac.Common;
 using LibHac.Fs;
 using LibHac.FsSystem;
 
@@ -80,29 +83,37 @@ namespace LibHac
             return new CachedStorage(new Aes128CtrStorage(encStorage, Key, Header.SectionCounters[0], true), 0x4000, 4, true);
         }
 
+        private IStorage OpenSection(int i)
+        {
+            return new Aes128CtrStorage(
+                Storage.Slice(
+                    Header.SectionOffsets[i], 
+                    Header.SectionSizes[i]), 
+                Key, 
+                Header.SectionCounters[i], 
+                true);
+        }
+
         public IStorage OpenIni1()
         {
-            // Handle 8.0.0+ INI1 embedded within Kernel
-            // Todo: Figure out how to better deal with this once newer versions are released
             if (Header.SectionSizes[1] == 0)
             {
                 IStorage kernelStorage = OpenKernel();
 
                 var reader = new BinaryReader(kernelStorage.AsStream());
-                reader.BaseStream.Position = 0x168;
+                for (int i = 0; i < (Header.SectionSizes[0] / sizeof(int)) - 1; i++)
+                    if (reader.ReadUInt32() == 0xD51C403E)
+                        break;
 
-                int embeddedIniOffset = (int)reader.ReadInt64();
+                reader.BaseStream.Seek(-Unsafe.SizeOf<KernelMap>(), SeekOrigin.Current);
 
-                reader.BaseStream.Position = embeddedIniOffset + 4;
-                int size = reader.ReadInt32();
+                KernelMap map = new KernelMap();
+                reader.Read(SpanHelpers.AsByteSpan(ref map));
 
-                return kernelStorage.Slice(embeddedIniOffset, size);
-            }
-
-            int offset = 0x200 + Header.SectionSizes[0];
-            IStorage encStorage = Storage.Slice(offset, Header.SectionSizes[1]);
-
-            return new CachedStorage(new Aes128CtrStorage(encStorage, Key, Header.SectionCounters[1], true), 0x4000, 4, true);
+                return new CachedStorage(kernelStorage.Slice(map.Ini1StartOffset), 0x4000, 4, true);
+            } 
+            else
+                return new CachedStorage(OpenSection(1), 0x4000, 4, true);
         }
 
         private int FindKeyGeneration(Keyset keyset, IStorage storage)
@@ -124,6 +135,24 @@ namespace LibHac
             }
 
             throw new InvalidDataException("Failed to decrypt package2! Is the correct key present?");
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct KernelMap
+        {
+            public uint TextStartOffset;
+            public uint TextEndOffset;
+            public uint RodataStartOffset;
+            public uint RodataEndOffset;
+            public uint DataStartOffset;
+            public uint DataEndOffset;
+            public uint BssStartOffset;
+            public uint BssEndOffset;
+            public uint Ini1StartOffset;
+            public uint DynamicOffset;
+            public uint InitArrayStartOffset;
+            public uint InitArrayEndOffset;
+            public uint End;
         }
     }
 
