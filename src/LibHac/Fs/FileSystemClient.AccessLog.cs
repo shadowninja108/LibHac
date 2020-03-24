@@ -105,9 +105,9 @@ namespace LibHac.Fs
             return IsEnabledAccessLog(AccessLogTarget.All);
         }
 
-        internal bool IsEnabledFileSystemAccessorAccessLog(string mountName)
+        internal bool IsEnabledFileSystemAccessorAccessLog(U8Span mountName)
         {
-            if (MountTable.Find(mountName, out FileSystemAccessor accessor).IsFailure())
+            if (MountTable.Find(mountName.ToString(), out FileSystemAccessor accessor).IsFailure())
             {
                 return true;
             }
@@ -148,6 +148,30 @@ namespace LibHac.Fs
         internal void OutputAccessLog(Result result, TimeSpan startTime, TimeSpan endTime, DirectoryHandle handle, string message, [CallerMemberName] string caller = "")
         {
             OutputAccessLogImpl(result, startTime, endTime, handle.GetId(), message, caller);
+        }
+
+        internal void OutputAccessLogUnlessResultSuccess(Result result, TimeSpan startTime, TimeSpan endTime, string message, [CallerMemberName] string caller = "")
+        {
+            if (result.IsFailure())
+            {
+                OutputAccessLogImpl(result, startTime, endTime, 0, message, caller);
+            }
+        }
+
+        internal void OutputAccessLogUnlessResultSuccess(Result result, TimeSpan startTime, TimeSpan endTime, FileHandle handle, string message, [CallerMemberName] string caller = "")
+        {
+            if (result.IsFailure())
+            {
+                OutputAccessLogImpl(result, startTime, endTime, handle.GetId(), message, caller);
+            }
+        }
+
+        internal void OutputAccessLogUnlessResultSuccess(Result result, TimeSpan startTime, TimeSpan endTime, DirectoryHandle handle, string message, [CallerMemberName] string caller = "")
+        {
+            if (result.IsFailure())
+            {
+                OutputAccessLogImpl(result, startTime, endTime, handle.GetId(), message, caller);
+            }
         }
 
         internal void OutputAccessLogImpl(Result result, TimeSpan startTime, TimeSpan endTime, int handleId,
@@ -200,6 +224,27 @@ namespace LibHac.Fs
                 TimeSpan endTime = Time.GetCurrent();
 
                 OutputAccessLog(rc, startTime, endTime, handle, textGenerator(), caller);
+            }
+            else
+            {
+                rc = operation();
+            }
+
+            return rc;
+        }
+
+        public Result RunOperationWithAccessLogOnFailure(AccessLogTarget logTarget, Func<Result> operation,
+            Func<string> textGenerator, [CallerMemberName] string caller = "")
+        {
+            Result rc;
+
+            if (IsEnabledAccessLog(logTarget))
+            {
+                TimeSpan startTime = Time.GetCurrent();
+                rc = operation();
+                TimeSpan endTime = Time.GetCurrent();
+
+                OutputAccessLogUnlessResultSuccess(rc, startTime, endTime, textGenerator(), caller);
             }
             else
             {

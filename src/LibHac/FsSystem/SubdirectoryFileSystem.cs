@@ -1,134 +1,250 @@
 ﻿using System;
+using System.Diagnostics;
+using LibHac.Common;
 using LibHac.Fs;
 
 namespace LibHac.FsSystem
 {
     public class SubdirectoryFileSystem : FileSystemBase
     {
-        private string RootPath { get; }
-        private IFileSystem ParentFileSystem { get; }
+        private IFileSystem BaseFileSystem { get; }
+        private U8String RootPath { get; set; }
+        private bool PreserveUnc { get; }
 
-        private string ResolveFullPath(string path)
+        public static Result CreateNew(out SubdirectoryFileSystem created, IFileSystem baseFileSystem, U8Span rootPath, bool preserveUnc = false)
         {
-            return PathTools.Combine(RootPath, path);
+            var obj = new SubdirectoryFileSystem(baseFileSystem, preserveUnc);
+            Result rc = obj.Initialize(rootPath);
+
+            if (rc.IsSuccess())
+            {
+                created = obj;
+                return Result.Success;
+            }
+
+            obj.Dispose();
+            created = default;
+            return rc;
         }
 
-        public SubdirectoryFileSystem(IFileSystem fs, string rootPath)
+        public SubdirectoryFileSystem(IFileSystem baseFileSystem, bool preserveUnc = false)
         {
-            ParentFileSystem = fs;
-            RootPath = PathTools.Normalize(rootPath);
+            BaseFileSystem = baseFileSystem;
+            PreserveUnc = preserveUnc;
         }
 
-        protected override Result CreateDirectoryImpl(string path)
+        private Result Initialize(U8Span rootPath)
         {
-            string fullPath = ResolveFullPath(PathTools.Normalize(path));
+            if (StringUtils.GetLength(rootPath, PathTools.MaxPathLength + 1) > PathTools.MaxPathLength)
+                return ResultFs.TooLongPath.Log();
 
-            return ParentFileSystem.CreateDirectory(fullPath);
+            Span<byte> normalizedPath = stackalloc byte[PathTools.MaxPathLength + 2];
+
+            Result rc = PathTool.Normalize(normalizedPath, out long normalizedPathLen, rootPath, PreserveUnc, false);
+            if (rc.IsFailure()) return rc;
+
+            // Ensure a trailing separator
+            if (!PathTool.IsSeparator(normalizedPath[(int)normalizedPathLen - 1]))
+            {
+                Debug.Assert(normalizedPathLen + 2 <= normalizedPath.Length);
+
+                normalizedPath[(int)normalizedPathLen] = StringTraits.DirectorySeparator;
+                normalizedPath[(int)normalizedPathLen + 1] = StringTraits.NullTerminator;
+                normalizedPathLen++;
+            }
+
+            var buffer = new byte[normalizedPathLen + 1];
+            normalizedPath.Slice(0, (int)normalizedPathLen).CopyTo(buffer);
+            RootPath = new U8String(buffer);
+
+            return Result.Success;
         }
 
-        protected override Result CreateFileImpl(string path, long size, CreateFileOptions options)
+        private Result ResolveFullPath(Span<byte> outPath, U8Span relativePath)
         {
-            string fullPath = ResolveFullPath(PathTools.Normalize(path));
+            if (RootPath.Length + StringUtils.GetLength(relativePath, PathTools.MaxPathLength + 1) > outPath.Length)
+                return ResultFs.TooLongPath.Log();
 
-            return ParentFileSystem.CreateFile(fullPath, size, options);
+            // Copy root path to the output
+            RootPath.Value.CopyTo(outPath);
+
+            // Copy the normalized relative path to the output
+            return PathTool.Normalize(outPath.Slice(RootPath.Length - 2), out _, relativePath, PreserveUnc, false);
         }
 
-        protected override Result DeleteDirectoryImpl(string path)
+        protected override Result CreateDirectoryImpl(U8Span path)
         {
-            string fullPath = ResolveFullPath(PathTools.Normalize(path));
+            Span<byte> fullPath = stackalloc byte[PathTools.MaxPathLength + 1];
+            Result rc = ResolveFullPath(fullPath, path);
+            if (rc.IsFailure()) return rc;
 
-            return ParentFileSystem.DeleteDirectory(fullPath);
+            return BaseFileSystem.CreateDirectory(new U8Span(fullPath));
         }
 
-        protected override Result DeleteDirectoryRecursivelyImpl(string path)
+        protected override Result CreateFileImpl(U8Span path, long size, CreateFileOptions options)
         {
-            string fullPath = ResolveFullPath(PathTools.Normalize(path));
+            Span<byte> fullPath = stackalloc byte[PathTools.MaxPathLength + 1];
+            Result rc = ResolveFullPath(fullPath, path);
+            if (rc.IsFailure()) return rc;
 
-            return ParentFileSystem.DeleteDirectoryRecursively(fullPath);
+            return BaseFileSystem.CreateFile(new U8Span(fullPath), size, options);
         }
 
-        protected override Result CleanDirectoryRecursivelyImpl(string path)
+        protected override Result DeleteDirectoryImpl(U8Span path)
         {
-            string fullPath = ResolveFullPath(PathTools.Normalize(path));
+            Span<byte> fullPath = stackalloc byte[PathTools.MaxPathLength + 1];
+            Result rc = ResolveFullPath(fullPath, path);
+            if (rc.IsFailure()) return rc;
 
-            return ParentFileSystem.CleanDirectoryRecursively(fullPath);
+            return BaseFileSystem.DeleteDirectory(new U8Span(fullPath));
         }
 
-        protected override Result DeleteFileImpl(string path)
+        protected override Result DeleteDirectoryRecursivelyImpl(U8Span path)
         {
-            string fullPath = ResolveFullPath(PathTools.Normalize(path));
+            Span<byte> fullPath = stackalloc byte[PathTools.MaxPathLength + 1];
+            Result rc = ResolveFullPath(fullPath, path);
+            if (rc.IsFailure()) return rc;
 
-            return ParentFileSystem.DeleteFile(fullPath);
+            return BaseFileSystem.DeleteDirectoryRecursively(new U8Span(fullPath));
         }
 
-        protected override Result OpenDirectoryImpl(out IDirectory directory, string path, OpenDirectoryMode mode)
+        protected override Result CleanDirectoryRecursivelyImpl(U8Span path)
         {
-            string fullPath = ResolveFullPath(PathTools.Normalize(path));
+            Span<byte> fullPath = stackalloc byte[PathTools.MaxPathLength + 1];
+            Result rc = ResolveFullPath(fullPath, path);
+            if (rc.IsFailure()) return rc;
 
-            return ParentFileSystem.OpenDirectory(out directory, fullPath, mode);
+            return BaseFileSystem.CleanDirectoryRecursively(new U8Span(fullPath));
         }
 
-        protected override Result OpenFileImpl(out IFile file, string path, OpenMode mode)
+        protected override Result DeleteFileImpl(U8Span path)
         {
-            string fullPath = ResolveFullPath(PathTools.Normalize(path));
+            Span<byte> fullPath = stackalloc byte[PathTools.MaxPathLength + 1];
+            Result rc = ResolveFullPath(fullPath, path);
+            if (rc.IsFailure()) return rc;
 
-            return ParentFileSystem.OpenFile(out file, fullPath, mode);
+            return BaseFileSystem.DeleteFile(new U8Span(fullPath));
         }
 
-        protected override Result RenameDirectoryImpl(string oldPath, string newPath)
+        protected override Result OpenDirectoryImpl(out IDirectory directory, U8Span path, OpenDirectoryMode mode)
         {
-            string fullOldPath = ResolveFullPath(PathTools.Normalize(oldPath));
-            string fullNewPath = ResolveFullPath(PathTools.Normalize(newPath));
+            directory = default;
 
-            return ParentFileSystem.RenameDirectory(fullOldPath, fullNewPath);
+            Span<byte> fullPath = stackalloc byte[PathTools.MaxPathLength + 1];
+            Result rc = ResolveFullPath(fullPath, path);
+            if (rc.IsFailure()) return rc;
+
+            return BaseFileSystem.OpenDirectory(out directory, new U8Span(fullPath), mode);
         }
 
-        protected override Result RenameFileImpl(string oldPath, string newPath)
+        protected override Result OpenFileImpl(out IFile file, U8Span path, OpenMode mode)
         {
-            string fullOldPath = ResolveFullPath(PathTools.Normalize(oldPath));
-            string fullNewPath = ResolveFullPath(PathTools.Normalize(newPath));
+            file = default;
 
-            return ParentFileSystem.RenameFile(fullOldPath, fullNewPath);
+            Span<byte> fullPath = stackalloc byte[PathTools.MaxPathLength + 1];
+            Result rc = ResolveFullPath(fullPath, path);
+            if (rc.IsFailure()) return rc;
+
+            return BaseFileSystem.OpenFile(out file, new U8Span(fullPath), mode);
         }
 
-        protected override Result GetEntryTypeImpl(out DirectoryEntryType entryType, string path)
+        protected override Result RenameDirectoryImpl(U8Span oldPath, U8Span newPath)
         {
-            string fullPath = ResolveFullPath(PathTools.Normalize(path));
+            Span<byte> fullOldPath = stackalloc byte[PathTools.MaxPathLength + 1];
+            Span<byte> fullNewPath = stackalloc byte[PathTools.MaxPathLength + 1];
 
-            return ParentFileSystem.GetEntryType(out entryType, fullPath);
+            Result rc = ResolveFullPath(fullOldPath, oldPath);
+            if (rc.IsFailure()) return rc;
+
+            rc = ResolveFullPath(fullNewPath, newPath);
+            if (rc.IsFailure()) return rc;
+
+            return BaseFileSystem.RenameDirectory(new U8Span(fullOldPath), new U8Span(fullNewPath));
+        }
+
+        protected override Result RenameFileImpl(U8Span oldPath, U8Span newPath)
+        {
+            Span<byte> fullOldPath = stackalloc byte[PathTools.MaxPathLength + 1];
+            Span<byte> fullNewPath = stackalloc byte[PathTools.MaxPathLength + 1];
+
+            Result rc = ResolveFullPath(fullOldPath, oldPath);
+            if (rc.IsFailure()) return rc;
+
+            rc = ResolveFullPath(fullNewPath, newPath);
+            if (rc.IsFailure()) return rc;
+
+            return BaseFileSystem.RenameFile(new U8Span(fullOldPath), new U8Span(fullNewPath));
+        }
+
+        protected override Result GetEntryTypeImpl(out DirectoryEntryType entryType, U8Span path)
+        {
+            entryType = default;
+
+            FsPath fullPath;
+            unsafe { _ = &fullPath; } // workaround for CS0165
+
+            Result rc = ResolveFullPath(fullPath.Str, path);
+            if (rc.IsFailure()) return rc;
+
+            return BaseFileSystem.GetEntryType(out entryType, fullPath);
         }
 
         protected override Result CommitImpl()
         {
-            return ParentFileSystem.Commit();
+            return BaseFileSystem.Commit();
         }
 
-        protected override Result GetFreeSpaceSizeImpl(out long freeSpace, string path)
+        protected override Result CommitProvisionallyImpl(long commitCount)
         {
-            string fullPath = ResolveFullPath(PathTools.Normalize(path));
-
-            return ParentFileSystem.GetFreeSpaceSize(out freeSpace, fullPath);
+            return BaseFileSystem.CommitProvisionally(commitCount);
         }
 
-        protected override Result GetTotalSpaceSizeImpl(out long totalSpace, string path)
+        protected override Result RollbackImpl()
         {
-            string fullPath = ResolveFullPath(PathTools.Normalize(path));
-
-            return ParentFileSystem.GetTotalSpaceSize(out totalSpace, fullPath);
+            return BaseFileSystem.Rollback();
         }
 
-        protected override Result GetFileTimeStampRawImpl(out FileTimeStampRaw timeStamp, string path)
+        protected override Result GetFreeSpaceSizeImpl(out long freeSpace, U8Span path)
         {
-            string fullPath = ResolveFullPath(PathTools.Normalize(path));
+            freeSpace = default;
 
-            return ParentFileSystem.GetFileTimeStampRaw(out timeStamp, fullPath);
+            Span<byte> fullPath = stackalloc byte[PathTools.MaxPathLength + 1];
+            Result rc = ResolveFullPath(fullPath, path);
+            if (rc.IsFailure()) return rc;
+
+            return BaseFileSystem.GetFreeSpaceSize(out freeSpace, new U8Span(fullPath));
         }
 
-        protected override Result QueryEntryImpl(Span<byte> outBuffer, ReadOnlySpan<byte> inBuffer, QueryId queryId, string path)
+        protected override Result GetTotalSpaceSizeImpl(out long totalSpace, U8Span path)
         {
-            string fullPath = ResolveFullPath(PathTools.Normalize(path));
+            totalSpace = default;
 
-            return ParentFileSystem.QueryEntry(outBuffer, inBuffer, queryId, fullPath);
+            Span<byte> fullPath = stackalloc byte[PathTools.MaxPathLength + 1];
+            Result rc = ResolveFullPath(fullPath, path);
+            if (rc.IsFailure()) return rc;
+
+            return BaseFileSystem.GetTotalSpaceSize(out totalSpace, new U8Span(fullPath));
+        }
+
+        protected override Result GetFileTimeStampRawImpl(out FileTimeStampRaw timeStamp, U8Span path)
+        {
+            timeStamp = default;
+
+            Span<byte> fullPath = stackalloc byte[PathTools.MaxPathLength + 1];
+            Result rc = ResolveFullPath(fullPath, path);
+            if (rc.IsFailure()) return rc;
+
+            return BaseFileSystem.GetFileTimeStampRaw(out timeStamp, new U8Span(fullPath));
+        }
+
+        protected override Result QueryEntryImpl(Span<byte> outBuffer, ReadOnlySpan<byte> inBuffer, QueryId queryId,
+            U8Span path)
+        {
+            Span<byte> fullPath = stackalloc byte[PathTools.MaxPathLength + 1];
+            Result rc = ResolveFullPath(fullPath, path);
+            if (rc.IsFailure()) return rc;
+
+            return BaseFileSystem.QueryEntry(outBuffer, inBuffer, queryId, new U8Span(fullPath));
         }
     }
 }

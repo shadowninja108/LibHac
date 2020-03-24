@@ -1,5 +1,6 @@
 ﻿using System;
 using LibHac.Fs;
+using LibHac.Fs.Shim;
 using LibHac.FsService.Creators;
 
 namespace LibHac.FsService
@@ -35,9 +36,13 @@ namespace LibHac.FsService
             var fsProxy = new FileSystemProxy(FsProxyCore, this);
             FsClient = new FileSystemClient(this, fsProxy, Timer);
 
+            // NS usually takes care of this
+            if (FsClient.IsSdCardInserted())
+                FsClient.SetSdCardAccessibility(true);
+
             SaveDataIndexerManager = new SaveDataIndexerManager(FsClient, SaveIndexerId);
 
-            fsProxy.CleanUpTemporaryStorage();
+            fsProxy.CleanUpTemporaryStorage().IgnoreResult();
         }
 
         /// <summary>

@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <VersionPrefix>0.8.0</VersionPrefix>
+    <VersionPrefix>0.10.0</VersionPrefix>
     <TargetFrameworks>netcoreapp3.0;netstandard2.1</TargetFrameworks>
     <LangVersion>8.0</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -35,6 +35,10 @@
 
   <ItemGroup Condition=" '$(TargetFramework)' == 'netstandard2.1' ">
     <PackageReference Include="System.Memory" Version="4.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Condition="Exists('ResultNameResolver.Generated.cs')" Remove="ResultNameResolver.Archive.cs" />
   </ItemGroup>
 
   <ItemGroup>

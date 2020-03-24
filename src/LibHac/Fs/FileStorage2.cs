@@ -6,10 +6,10 @@ namespace LibHac.Fs
 {
     public class FileStorage2 : StorageBase
     {
-        private const long InvalidSize = -1;
+        protected const long InvalidSize = -1;
 
         private IFile BaseFile { get; set; }
-        private long FileSize { get; set; }
+        protected long FileSize { get; set; }
 
         public FileStorage2(IFile baseFile)
         {
@@ -48,7 +48,7 @@ namespace LibHac.Fs
             if (rc.IsFailure()) return rc;
 
             if (!IsRangeValid(offset, destination.Length, FileSize))
-                return ResultFs.ValueOutOfRange.Log();
+                return ResultFs.OutOfRange.Log();
 
             return BaseFile.Read(out _, offset, destination, ReadOption.None);
         }
@@ -62,7 +62,7 @@ namespace LibHac.Fs
             if (rc.IsFailure()) return rc;
 
             if (!IsRangeValid(offset, source.Length, FileSize))
-                return ResultFs.ValueOutOfRange.Log();
+                return ResultFs.OutOfRange.Log();
 
             return BaseFile.Write(offset, source, WriteOption.None);
         }
@@ -117,7 +117,7 @@ namespace LibHac.Fs
 
                     if (size < 0 || offset < 0)
                     {
-                        return ResultFs.ValueOutOfRange.Log();
+                        return ResultFs.OutOfRange.Log();
                     }
 
                     return BaseFile.OperateRange(outBuffer, operationId, offset, size, inBuffer);

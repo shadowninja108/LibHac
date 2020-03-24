@@ -1,4 +1,5 @@
 ﻿using LibHac.Common;
+using static LibHac.Fs.CommonMountNames;
 
 namespace LibHac.Fs
 {
@@ -6,7 +7,7 @@ namespace LibHac.Fs
     {
         public static Result CheckMountName(U8Span name)
         {
-            if (name.IsNull()) return ResultFs.NullArgument.Log();
+            if (name.IsNull()) return ResultFs.NullptrArgument.Log();
 
             if (name.Length > 0 && name[0] == '@') return ResultFs.InvalidMountName.Log();
             if (!CheckMountNameImpl(name)) return ResultFs.InvalidMountName.Log();
@@ -16,11 +17,16 @@ namespace LibHac.Fs
 
         public static Result CheckMountNameAcceptingReservedMountName(U8Span name)
         {
-            if (name.IsNull()) return ResultFs.NullArgument.Log();
+            if (name.IsNull()) return ResultFs.NullptrArgument.Log();
 
             if (!CheckMountNameImpl(name)) return ResultFs.InvalidMountName.Log();
 
             return Result.Success;
+        }
+
+        public static bool IsReservedMountName(U8Span name)
+        {
+            return (uint)name.Length > 0 && name[0] == ReservedMountNamePrefixCharacter;
         }
 
         // ReSharper disable once UnusedParameter.Local

@@ -9,9 +9,10 @@ namespace LibHac.FsSystem
 {
     public static class PathTools
     {
+        // todo: Consolidate these
         internal const char DirectorySeparator = '/';
         internal const char MountSeparator = ':';
-        internal const int MountNameLength = 0xF;
+        internal const int MountNameLengthMax = 0xF;
 
         // Todo: Remove
         internal const int MaxPathLength = 0x300;
@@ -24,7 +25,7 @@ namespace LibHac.FsSystem
             var sb = new ValueStringBuilder(initialBuffer);
 
             int rootLen = 0;
-            int maxMountLen = Math.Min(inPath.Length, MountNameLength);
+            int maxMountLen = Math.Min(inPath.Length, MountNameLengthMax);
 
             for (int i = 0; i < maxMountLen; i++)
             {
@@ -246,6 +247,38 @@ namespace LibHac.FsSystem
             return path.Slice(0, i);
         }
 
+        /// <summary>
+        /// Returns the name and extension parts of the given path. The returned ReadOnlySpan
+        /// contains the characters of the path that follows the last separator in path.
+        /// </summary>
+        public static ReadOnlySpan<byte> GetFileName(ReadOnlySpan<byte> path)
+        {
+            Debug.Assert(IsNormalized(path));
+
+            int i = path.Length;
+
+            while (i >= 1 && path[i - 1] != '/') i--;
+
+            i = Math.Max(i, 0);
+            return path.Slice(i, path.Length - i);
+        }
+
+        public static ReadOnlySpan<byte> GetLastSegment(ReadOnlySpan<byte> path)
+        {
+            Debug.Assert(IsNormalized(path));
+
+            if (path.Length == 0)
+                return path;
+
+            int endIndex = path[path.Length - 1] == DirectorySeparator ? path.Length - 1 : path.Length;
+            int i = endIndex;
+
+            while (i >= 1 && path[i - 1] != '/') i--;
+
+            i = Math.Max(i, 0);
+            return path.Slice(i, endIndex - i);
+        }
+
         public static bool IsNormalized(ReadOnlySpan<char> path)
         {
             var state = NormalizeState.Initial;
@@ -435,7 +468,7 @@ namespace LibHac.FsSystem
 
         public static Result GetMountNameLength(string path, out int length)
         {
-            int maxLen = Math.Min(path.Length, MountNameLength);
+            int maxLen = Math.Min(path.Length, MountNameLengthMax);
 
             for (int i = 0; i < maxLen; i++)
             {
@@ -463,200 +496,6 @@ namespace LibHac.FsSystem
         }
 
         private static bool IsValidMountNameChar(byte c) => IsValidMountNameChar((char)c);
-
-        private static Result GetPathRoot(out ReadOnlySpan<byte> afterRootPath, Span<byte> pathRootBuffer, out int outRootLength, ReadOnlySpan<byte> path)
-        {
-            outRootLength = 0;
-            afterRootPath = path;
-
-            if (path.Length == 0) return Result.Success;
-
-            int mountNameStart;
-            if (IsDirectorySeparator(path[0]))
-            {
-                mountNameStart = 1;
-            }
-            else
-            {
-                mountNameStart = 0;
-            }
-
-            int rootLength = 0;
-
-            for (int i = mountNameStart; i < mountNameStart + MountNameLength; i++)
-            {
-                if (i >= path.Length || path[i] == 0) break;
-
-                // Set the length to 0 if there's no mount name
-                if (IsDirectorySeparator(path[i]))
-                {
-                    outRootLength = 0;
-                    return Result.Success;
-                }
-
-                if (path[i] == MountSeparator)
-                {
-                    rootLength = i + 1;
-                    break;
-                }
-            }
-
-            if (mountNameStart >= rootLength - 1 || path[rootLength - 1] != MountSeparator)
-            {
-                return ResultFs.InvalidPathFormat.Log();
-            }
-
-            if (mountNameStart < rootLength)
-            {
-                for (int i = mountNameStart; i < rootLength; i++)
-                {
-                    if (path[i] == '.')
-                    {
-                        return ResultFs.InvalidCharacter.Log();
-                    }
-                }
-            }
-
-            if (!pathRootBuffer.IsEmpty)
-            {
-                if (rootLength > pathRootBuffer.Length)
-                {
-                    return ResultFs.TooLongPath.Log();
-                }
-
-                path.Slice(0, rootLength).CopyTo(pathRootBuffer);
-            }
-
-            afterRootPath = path.Slice(rootLength);
-            outRootLength = rootLength;
-            return Result.Success;
-        }
-
-        public static Result Normalize(Span<byte> normalizedPath, out int normalizedLength, ReadOnlySpan<byte> path, bool hasMountName)
-        {
-            normalizedLength = 0;
-
-            int rootLength = 0;
-            ReadOnlySpan<byte> mainPath = path;
-
-            if (hasMountName)
-            {
-                Result pathRootRc = GetPathRoot(out mainPath, normalizedPath, out rootLength, path);
-                if (pathRootRc.IsFailure()) return pathRootRc;
-            }
-
-            var sb = new PathBuilder(normalizedPath.Slice(rootLength));
-
-            var state = NormalizeState.Initial;
-
-            for (int i = 0; i < mainPath.Length; i++)
-            {
-                Result rc = Result.Success;
-                byte c = mainPath[i];
-
-                // Read input strings as null-terminated
-                if (c == 0) break;
-
-                switch (state)
-                {
-                    case NormalizeState.Initial when IsDirectorySeparator(c):
-                        state = NormalizeState.Delimiter;
-                        break;
-
-                    case NormalizeState.Initial:
-                        return ResultFs.InvalidPathFormat.Log();
-
-                    case NormalizeState.Normal when IsDirectorySeparator(c):
-                        state = NormalizeState.Delimiter;
-                        break;
-
-                    case NormalizeState.Normal:
-                        rc = sb.Append(c);
-                        break;
-
-                    case NormalizeState.Delimiter when IsDirectorySeparator(c):
-                        break;
-
-                    case NormalizeState.Delimiter when c == '.':
-                        state = NormalizeState.Dot;
-                        rc = sb.AppendWithPrecedingSeparator(c);
-                        break;
-
-                    case NormalizeState.Delimiter:
-                        state = NormalizeState.Normal;
-                        rc = sb.AppendWithPrecedingSeparator(c);
-                        break;
-
-                    case NormalizeState.Dot when IsDirectorySeparator(c):
-                        state = NormalizeState.Delimiter;
-                        rc = sb.GoUpLevels(1);
-                        break;
-
-                    case NormalizeState.Dot when c == '.':
-                        state = NormalizeState.DoubleDot;
-                        rc = sb.Append(c);
-                        break;
-
-                    case NormalizeState.Dot:
-                        state = NormalizeState.Normal;
-                        rc = sb.Append(c);
-                        break;
-
-                    case NormalizeState.DoubleDot when IsDirectorySeparator(c):
-                        state = NormalizeState.Delimiter;
-                        rc = sb.GoUpLevels(2);
-                        break;
-
-                    case NormalizeState.DoubleDot:
-                        state = NormalizeState.Normal;
-                        break;
-                }
-
-                if (rc.IsFailure())
-                {
-                    if (rc == ResultFs.TooLongPath)
-                    {
-                        // Make sure pending delimiters are added to the string if possible
-                        if (state == NormalizeState.Delimiter)
-                        {
-                            sb.Append((byte)DirectorySeparator);
-                        }
-                    }
-
-                    normalizedLength = sb.Length;
-                    sb.Terminate();
-                    return rc;
-                }
-            }
-
-            Result finalRc = Result.Success;
-
-            switch (state)
-            {
-                case NormalizeState.Dot:
-                    state = NormalizeState.Delimiter;
-                    finalRc = sb.GoUpLevels(1);
-                    break;
-
-                case NormalizeState.DoubleDot:
-                    state = NormalizeState.Delimiter;
-                    finalRc = sb.GoUpLevels(2);
-                    break;
-            }
-
-            // Add the pending delimiter if the path is empty
-            // or if the path has only a mount name with no trailing delimiter
-            if (state == NormalizeState.Delimiter && sb.Length == 0 ||
-                rootLength > 0 && sb.Length == 0)
-            {
-                finalRc = sb.Append((byte)'/');
-            }
-
-            normalizedLength = sb.Length;
-            sb.Terminate();
-
-            return finalRc;
-        }
 
         private enum NormalizeState
         {

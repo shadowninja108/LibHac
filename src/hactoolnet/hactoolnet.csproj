@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <VersionPrefix>0.8.0</VersionPrefix>
+    <VersionPrefix>0.10.0</VersionPrefix>
     <PathMap Condition=" '$(BuildType)' == 'Release' ">$(MSBuildProjectDirectory)=C:/hactoolnet/</PathMap>
   </PropertyGroup>
 
@@ -32,7 +32,7 @@
     <RootAllApplicationAssemblies>false</RootAllApplicationAssemblies>
   </PropertyGroup>
 
-  <ItemGroup Condition=" $(BuildType.StartsWith('native')) and '$(BuildType)' != 'native-untrimmed' ">
+  <ItemGroup Condition=" $(BuildType.StartsWith('native')) and '$(OS)' == 'Windows_NT' and '$(BuildType)' != 'native-untrimmed' ">
     <IlcArg Include="--removefeature:EventSource" />
   </ItemGroup>
 

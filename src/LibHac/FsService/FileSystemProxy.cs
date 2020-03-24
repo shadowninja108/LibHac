@@ -2,6 +2,7 @@
 using System.Runtime.CompilerServices;
 using LibHac.Common;
 using LibHac.Fs;
+using LibHac.FsService.Impl;
 using LibHac.FsSystem;
 using LibHac.Kvdb;
 using LibHac.Ncm;
@@ -12,7 +13,7 @@ namespace LibHac.FsService
     public class FileSystemProxy : IFileSystemProxy
     {
         private FileSystemProxyCore FsProxyCore { get; }
-        private FileSystemServer FsServer { get; }
+        internal FileSystemServer FsServer { get; }
 
         public long CurrentProcess { get; private set; }
 
@@ -34,7 +35,28 @@ namespace LibHac.FsService
 
         public Result OpenFileSystemWithId(out IFileSystem fileSystem, ref FsPath path, TitleId titleId, FileSystemProxyType type)
         {
-            throw new NotImplementedException();
+            fileSystem = default;
+
+            // Missing permission check, speed emulation storage type wrapper, and FileSystemInterfaceAdapter
+
+            bool canMountSystemDataPrivate = false;
+
+            var normalizer = new PathNormalizer(path, GetPathNormalizerOptions(path));
+            if (normalizer.Result.IsFailure()) return normalizer.Result;
+
+            // ReSharper disable once ConditionIsAlwaysTrueOrFalse
+            return FsProxyCore.OpenFileSystem(out fileSystem, normalizer.Path, type, canMountSystemDataPrivate, titleId);
+        }
+
+        private PathNormalizer.Option GetPathNormalizerOptions(U8Span path)
+        {
+            int hostMountLength = StringUtils.GetLength(CommonMountNames.HostRootFileSystemMountName,
+                PathTools.MountNameLengthMax);
+
+            bool isHostPath = StringUtils.Compare(path, CommonMountNames.HostRootFileSystemMountName, hostMountLength) == 0;
+
+            PathNormalizer.Option hostOption = isHostPath ? PathNormalizer.Option.PreserveUnc : PathNormalizer.Option.None;
+            return PathNormalizer.Option.HasMountName | PathNormalizer.Option.PreserveTailSeparator | hostOption;
         }
 
         public Result OpenFileSystemWithPatch(out IFileSystem fileSystem, TitleId titleId, FileSystemProxyType type)
@@ -139,10 +161,10 @@ namespace LibHac.FsService
                         // Check if permissions allow deleting save data
                     }
 
-                    reader.Indexer.SetState(saveDataId, SaveDataState.Creating);
+                    rc = reader.Indexer.SetState(saveDataId, SaveDataState.Creating);
                     if (rc.IsFailure()) return rc;
 
-                    reader.Indexer.Commit();
+                    rc = reader.Indexer.Commit();
                     if (rc.IsFailure()) return rc;
                 }
 
@@ -172,12 +194,12 @@ namespace LibHac.FsService
             bool doSecureDelete = false;
 
             Result rc = FsProxyCore.DeleteSaveDataMetaFiles(saveDataId, spaceId);
-            if (rc.IsFailure() && rc != ResultFs.PathNotFound)
+            if (rc.IsFailure() && !ResultFs.PathNotFound.Includes(rc))
                 return rc;
 
             // ReSharper disable once ConditionIsAlwaysTrueOrFalse
             rc = FsProxyCore.DeleteSaveDataFileSystem(spaceId, saveDataId, doSecureDelete);
-            if (rc.IsFailure() && rc != ResultFs.PathNotFound)
+            if (rc.IsFailure() && !ResultFs.PathNotFound.Includes(rc))
                 return rc;
 
             return Result.Success;
@@ -300,7 +322,7 @@ namespace LibHac.FsService
                         rc = reader.Indexer.Add(out saveDataId, ref indexerKey);
                     }
 
-                    if (rc == ResultFs.SaveDataPathAlreadyExists)
+                    if (ResultFs.SaveDataPathAlreadyExists.Includes(rc))
                     {
                         return ResultFs.PathAlreadyExists.LogConverted(rc);
                     }
@@ -330,7 +352,7 @@ namespace LibHac.FsService
 
                 if (rc.IsFailure())
                 {
-                    if (rc != ResultFs.PathAlreadyExists) return rc;
+                    if (!ResultFs.PathAlreadyExists.Includes(rc)) return rc;
 
                     rc = DeleteSaveDataFileSystemImpl2(creationInfo.SpaceId, saveDataId);
                     if (rc.IsFailure()) return rc;
@@ -385,7 +407,7 @@ namespace LibHac.FsService
                 // Revert changes if an error happened in the middle of creation
                 if (isDeleteNeeded)
                 {
-                    DeleteSaveDataFileSystemImpl2(creationInfo.SpaceId, saveDataId);
+                    DeleteSaveDataFileSystemImpl2(creationInfo.SpaceId, saveDataId).IgnoreResult();
 
                     if (reader.IsInitialized && saveDataId != FileSystemServer.SaveIndexerId)
                     {
@@ -393,8 +415,8 @@ namespace LibHac.FsService
 
                         if (rc.IsSuccess() && value.SpaceId == creationInfo.SpaceId)
                         {
-                            reader.Indexer.Delete(saveDataId);
-                            reader.Indexer.Commit();
+                            reader.Indexer.Delete(saveDataId).IgnoreResult();
+                            reader.Indexer.Commit().IgnoreResult();
                         }
                     }
                 }
@@ -500,7 +522,7 @@ namespace LibHac.FsService
 
             if (saveFsResult.IsSuccess()) return Result.Success;
 
-            if (saveFsResult != ResultFs.PathNotFound && saveFsResult != ResultFs.TargetNotFound) return saveFsResult;
+            if (!ResultFs.PathNotFound.Includes(saveFsResult) && !ResultFs.TargetNotFound.Includes(saveFsResult)) return saveFsResult;
 
             if (saveDataId != FileSystemServer.SaveIndexerId)
             {
@@ -510,7 +532,7 @@ namespace LibHac.FsService
                 }
             }
 
-            if (saveFsResult == ResultFs.PathNotFound)
+            if (ResultFs.PathNotFound.Includes(saveFsResult))
             {
                 return ResultFs.TargetNotFound.LogConverted(saveFsResult);
             }
@@ -554,7 +576,8 @@ namespace LibHac.FsService
             if (attributeCopy.Type == SaveDataType.Cache)
             {
                 // Check whether the save is on the SD card or the BIS
-                throw new NotImplementedException();
+                Result rc = GetSpaceIdForCacheStorage(out actualSpaceId, attributeCopy.TitleId);
+                if (rc.IsFailure()) return rc;
             }
             else
             {
@@ -660,9 +683,16 @@ namespace LibHac.FsService
             throw new NotImplementedException();
         }
 
-        public Result OpenHostFileSystem(out IFileSystem fileSystem, ref FsPath subPath)
+        public Result OpenHostFileSystemWithOption(out IFileSystem fileSystem, ref FsPath path, MountHostOption option)
         {
-            throw new NotImplementedException();
+            // Missing permission check
+
+            return FsProxyCore.OpenHostFileSystem(out fileSystem, new U8Span(path.Str), option.HasFlag(MountHostOption.PseudoCaseSensitive));
+        }
+
+        public Result OpenHostFileSystem(out IFileSystem fileSystem, ref FsPath path)
+        {
+            return OpenHostFileSystemWithOption(out fileSystem, ref path, MountHostOption.None);
         }
 
         public Result OpenSdCardFileSystem(out IFileSystem fileSystem)
@@ -854,6 +884,48 @@ namespace LibHac.FsService
             throw new NotImplementedException();
         }
 
+        private Result GetSpaceIdForCacheStorage(out SaveDataSpaceId spaceId, TitleId programId)
+        {
+            spaceId = default;
+
+            if (FsProxyCore.IsSdCardAccessible)
+            {
+                var filter = new SaveDataFilterInternal();
+
+                filter.SetSaveDataSpaceId(SaveDataSpaceId.SdCache);
+                filter.SetProgramId(programId);
+                filter.SetSaveDataType(SaveDataType.Cache);
+
+                Result rc = FindSaveDataWithFilterImpl(out long count, out _, SaveDataSpaceId.SdCache, ref filter);
+                if (rc.IsFailure()) return rc;
+
+                if (count > 0)
+                {
+                    spaceId = SaveDataSpaceId.SdCache;
+                    return Result.Success;
+                }
+            }
+
+            {
+                var filter = new SaveDataFilterInternal();
+
+                filter.SetSaveDataSpaceId(SaveDataSpaceId.User);
+                filter.SetProgramId(programId);
+                filter.SetSaveDataType(SaveDataType.Cache);
+
+                Result rc = FindSaveDataWithFilterImpl(out long count, out _, SaveDataSpaceId.User, ref filter);
+                if (rc.IsFailure()) return rc;
+
+                if (count > 0)
+                {
+                    spaceId = SaveDataSpaceId.User;
+                    return Result.Success;
+                }
+            }
+
+            return ResultFs.TargetNotFound.Log();
+        }
+
         public Result DeleteCacheStorage(short index)
         {
             throw new NotImplementedException();
@@ -973,17 +1045,14 @@ namespace LibHac.FsService
             return FsProxyCore.UnregisterAllExternalKey();
         }
 
-        public Result SetSdCardEncryptionSeed(ReadOnlySpan<byte> seed)
+        public Result SetSdCardEncryptionSeed(ref EncryptionSeed seed)
         {
-            // todo: use struct instead of byte span
-            if (seed.Length != 0x10) return ResultFs.InvalidSize.Log();
-
             // Missing permission check
 
-            Result rc = FsProxyCore.SetSdCardEncryptionSeed(seed);
+            Result rc = FsProxyCore.SetSdCardEncryptionSeed(ref seed);
             if (rc.IsFailure()) return rc;
 
-            // todo: Reset save data indexer
+            FsServer.SaveDataIndexerManager.ResetSdCardIndexer();
 
             return Result.Success;
         }
@@ -1073,7 +1142,7 @@ namespace LibHac.FsService
                 string.Empty, false);
             if (rc.IsFailure()) return rc;
 
-            rc = saveDirFs.CleanDirectoryRecursively("/");
+            rc = saveDirFs.CleanDirectoryRecursively("/".ToU8Span());
             if (rc.IsFailure()) return rc;
 
             SaveDataIndexerReader reader = default;
@@ -1083,7 +1152,7 @@ namespace LibHac.FsService
                 rc = FsServer.SaveDataIndexerManager.GetSaveDataIndexer(out reader, SaveDataSpaceId.Temporary);
                 if (rc.IsFailure()) return rc;
 
-                reader.Indexer.Reset();
+                reader.Indexer.Reset().IgnoreResult();
 
                 return Result.Success;
             }
@@ -1095,12 +1164,38 @@ namespace LibHac.FsService
 
         public Result SetSdCardAccessibility(bool isAccessible)
         {
-            throw new NotImplementedException();
+            // Missing permission check
+
+            FsProxyCore.IsSdCardAccessible = isAccessible;
+            return Result.Success;
         }
 
         public Result IsSdCardAccessible(out bool isAccessible)
         {
-            throw new NotImplementedException();
+            isAccessible = FsProxyCore.IsSdCardAccessible;
+            return Result.Success;
+        }
+
+        public Result OpenMultiCommitManager(out IMultiCommitManager commitManager)
+        {
+            commitManager = new MultiCommitManager(this);
+            return Result.Success;
+        }
+
+        internal Result OpenMultiCommitContextSaveData(out IFileSystem fileSystem)
+        {
+            fileSystem = default;
+
+            SaveDataAttribute attribute = default;
+            attribute.TitleId = new TitleId(MultiCommitManager.ProgramId);
+            attribute.SaveDataId = MultiCommitManager.SaveDataId;
+
+            Result rc = OpenSaveDataFileSystemImpl(out IFileSystem saveFs, out _, SaveDataSpaceId.System, ref attribute,
+                false, true);
+            if (rc.IsFailure()) return rc;
+
+            fileSystem = saveFs;
+            return Result.Success;
         }
 
         private static bool IsSystemSaveDataId(ulong id)

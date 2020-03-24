@@ -1,4 +1,5 @@
-﻿using LibHac.Fs;
+﻿using LibHac.Common;
+using LibHac.Fs;
 using LibHac.FsSystem;
 
 namespace LibHac.FsService
@@ -9,12 +10,13 @@ namespace LibHac.FsService
             bool createPathIfMissing)
         {
             subFileSystem = default;
+            Result rc;
 
             if (!createPathIfMissing)
             {
-                if (path == null) return ResultFs.NullArgument.Log();
+                if (path == null) return ResultFs.NullptrArgument.Log();
 
-                Result rc = baseFileSystem.GetEntryType(out DirectoryEntryType entryType, path);
+                rc = baseFileSystem.GetEntryType(out DirectoryEntryType entryType, path.ToU8Span());
 
                 if (rc.IsFailure() || entryType != DirectoryEntryType.Directory)
                 {
@@ -22,7 +24,8 @@ namespace LibHac.FsService
                 }
             }
 
-            baseFileSystem.EnsureDirectoryExists(path);
+            rc = baseFileSystem.EnsureDirectoryExists(path);
+            if (rc.IsFailure()) return rc;
 
             return CreateSubFileSystemImpl(out subFileSystem, baseFileSystem, path);
         }
@@ -31,14 +34,37 @@ namespace LibHac.FsService
         {
             subFileSystem = default;
 
-            if (path == null) return ResultFs.NullArgument.Log();
+            if (path == null) return ResultFs.NullptrArgument.Log();
 
-            Result rc = baseFileSystem.OpenDirectory(out IDirectory _, path, OpenDirectoryMode.Directory);
+            Result rc = baseFileSystem.OpenDirectory(out IDirectory _, path.ToU8Span(), OpenDirectoryMode.Directory);
             if (rc.IsFailure()) return rc;
 
-            subFileSystem = new SubdirectoryFileSystem(baseFileSystem, path);
+            rc = SubdirectoryFileSystem.CreateNew(out SubdirectoryFileSystem fs, baseFileSystem, path.ToU8String());
+            subFileSystem = fs;
+            return rc;
+        }
 
-            return Result.Success;
+        public static Result VerifyHostPath(U8Span path)
+        {
+            if(path.IsEmpty())
+                return Result.Success;
+
+            if (path[0] != StringTraits.DirectorySeparator)
+                return ResultFs.InvalidPathFormat.Log();
+
+            U8Span path2 = path.Slice(1);
+
+            if(path2.IsEmpty())
+                return Result.Success;
+
+            int skipLength = PathUtility.GetWindowsPathSkipLength(path2);
+            int remainingLength = PathTools.MaxPathLength - skipLength;
+
+            Result rc = PathUtility.VerifyPath(path2.Slice(skipLength), remainingLength, remainingLength);
+            if (rc.IsFailure()) return rc;
+
+            var normalizer = new PathNormalizer(path, PathNormalizer.Option.PreserveUnc);
+            return normalizer.Result;
         }
 
         public static bool UseDeviceUniqueSaveMac(SaveDataSpaceId spaceId)

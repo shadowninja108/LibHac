@@ -9,7 +9,10 @@ namespace LibHac.Fs
         private IFileSystem BaseFileSystem { get; set; }
         private IFile BaseFile { get; set; }
 
-        private FileStorageBasedFileSystem() { }
+        private FileStorageBasedFileSystem()
+        {
+            FileSize = InvalidSize;
+        }
 
         public static Result CreateNew(out FileStorageBasedFileSystem created, IFileSystem baseFileSystem, U8Span path,
             OpenMode mode)
@@ -30,7 +33,7 @@ namespace LibHac.Fs
 
         private Result Initialize(IFileSystem baseFileSystem, U8Span path, OpenMode mode)
         {
-            Result rc = baseFileSystem.OpenFile(out IFile file, path.ToString(), mode);
+            Result rc = baseFileSystem.OpenFile(out IFile file, path, mode);
             if (rc.IsFailure()) return rc;
 
             SetFile(file);

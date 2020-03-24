@@ -8,6 +8,7 @@ namespace LibHac.Fs
     [StructLayout(LayoutKind.Explicit, Size = 0x40)]
     public struct SaveDataAttribute : IEquatable<SaveDataAttribute>, IComparable<SaveDataAttribute>
     {
+        // todo: rename to ProgramId
         [FieldOffset(0x00)] public TitleId TitleId;
         [FieldOffset(0x08)] public UserId UserId;
         [FieldOffset(0x18)] public ulong SaveDataId;
@@ -33,14 +34,7 @@ namespace LibHac.Fs
         public override int GetHashCode()
         {
             // ReSharper disable NonReadonlyMemberInGetHashCode
-            int hashCode = 487790375;
-            hashCode = hashCode * -1521134295 + TitleId.GetHashCode();
-            hashCode = hashCode * -1521134295 + Type.GetHashCode();
-            hashCode = hashCode * -1521134295 + UserId.GetHashCode();
-            hashCode = hashCode * -1521134295 + SaveDataId.GetHashCode();
-            hashCode = hashCode * -1521134295 + Rank.GetHashCode();
-            hashCode = hashCode * -1521134295 + Index.GetHashCode();
-            return hashCode;
+            return HashCode.Combine(TitleId, Type, UserId, SaveDataId, Rank, Index);
             // ReSharper restore NonReadonlyMemberInGetHashCode
         }
 
@@ -63,23 +57,23 @@ namespace LibHac.Fs
     [StructLayout(LayoutKind.Explicit, Size = 0x48)]
     public struct SaveDataFilter
     {
-        [FieldOffset(0x00)] public bool FilterByTitleId;
+        [FieldOffset(0x00)] public bool FilterByProgramId;
         [FieldOffset(0x01)] public bool FilterBySaveDataType;
         [FieldOffset(0x02)] public bool FilterByUserId;
         [FieldOffset(0x03)] public bool FilterBySaveDataId;
         [FieldOffset(0x04)] public bool FilterByIndex;
         [FieldOffset(0x05)] public SaveDataRank Rank;
 
-        [FieldOffset(0x08)] public TitleId TitleId;
+        [FieldOffset(0x08)] public TitleId ProgramId;
         [FieldOffset(0x10)] public UserId UserId;
         [FieldOffset(0x20)] public ulong SaveDataId;
         [FieldOffset(0x28)] public SaveDataType SaveDataType;
         [FieldOffset(0x2A)] public short Index;
 
-        public void SetTitleId(TitleId value)
+        public void SetProgramId(TitleId value)
         {
-            FilterByTitleId = true;
-            TitleId = value;
+            FilterByProgramId = true;
+            ProgramId = value;
         }
 
         public void SetSaveDataType(SaveDataType value)

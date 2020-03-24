@@ -1,7 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -64,42 +62,6 @@ namespace LibHac
             }
 
             return true;
-        }
-
-        /// <summary>
-        /// Compares two strings stored int byte spans. For the strings to be equal,
-        /// they must terminate in the same place.
-        /// A string can be terminated by either a null character or the end of the span.
-        /// </summary>
-        /// <param name="s1">The first string to be compared.</param>
-        /// <param name="s2">The first string to be compared.</param>
-        /// <returns><see langword="true"/> if the strings are equal;
-        /// otherwise <see langword="false"/>.</returns>
-        public static bool StringSpansEqual(ReadOnlySpan<byte> s1, ReadOnlySpan<byte> s2)
-        {
-            // Make s1 the long string for simplicity
-            if (s1.Length < s2.Length)
-            {
-                ReadOnlySpan<byte> tmp = s1;
-                s1 = s2;
-                s2 = tmp;
-            }
-
-            int shortLength = s2.Length;
-            int i;
-
-            for (i = 0; i < shortLength; i++)
-            {
-                if (s1[i] != s2[i]) return false;
-
-                // Both strings are null-terminated
-                if (s1[i] == 0) return true;
-            }
-
-            // The bytes in the short string equal those in the long.
-            // Check if the strings are the same length or if the next
-            // character in the long string is a null character
-            return s1.Length == s2.Length || s1[i] == 0;
         }
 
         public static ReadOnlySpan<byte> GetUtf8Bytes(string value)
@@ -472,7 +434,6 @@ namespace LibHac
 
         public static void MemDump(this StringBuilder sb, string prefix, byte[] data)
         {
-
             int max = 32;
             int remaining = data.Length;
             bool first = true;
@@ -502,21 +463,21 @@ namespace LibHac
             }
         }
 
-        public static string GetKeyRevisionSummary(int revision)
+        public static string GetKeyRevisionSummary(int revision) => revision switch
         {
-            switch (revision)
-            {
-                case 0: return "1.0.0-2.3.0";
-                case 1: return "3.0.0";
-                case 2: return "3.0.1-3.0.2";
-                case 3: return "4.0.0-4.1.0";
-                case 4: return "5.0.0-5.1.0";
-                case 5: return "6.0.0-6.0.1";
-                case 6: return "6.2.0";
-                case 7: return "7.0.0-8.0.1";
-                default: return "Unknown";
-            }
-        }
+            0 => "1.0.0-2.3.0",
+            1 => "3.0.0",
+            2 => "3.0.1-3.0.2",
+            3 => "4.0.0-4.1.0",
+            4 => "5.0.0-5.1.0",
+            5 => "6.0.0-6.0.1",
+            6 => "6.2.0",
+            7 => "7.0.0-8.0.1",
+            8 => "8.1.0-8.1.1",
+            9 => "9.0.0-9.0.1",
+            0xA => "9.1.0-",
+            _ => "Unknown"
+        };
 
         public static bool IsSubRange(long startIndex, long subLength, long length)
         {
@@ -524,67 +485,11 @@ namespace LibHac
             return !isOutOfRange;
         }
 
-        public static int Swap32(int value)
-        {
-            uint uintVal = (uint)value;
-
-            return (int)(((uintVal >> 24) & 0x000000ff) |
-                         ((uintVal >> 8) & 0x0000ff00) |
-                         ((uintVal << 8) & 0x00ff0000) |
-                         ((uintVal << 24) & 0xff000000));
-        }
-
         public static int GetMasterKeyRevision(int keyGeneration)
         {
             if (keyGeneration == 0) return 0;
 
             return keyGeneration - 1;
-        }
-
-        public static void RemoveAll<T, K>(this Dictionary<T, K> d, IEnumerable<T> r)
-        {
-            d.Keys.Except(r).ToList()
-                .ForEach(key => d.Remove(key));
-        }
-
-    }
-    public class ByteArray128BitComparer : EqualityComparer<byte[]>
-    {
-        public override bool Equals(byte[] first, byte[] second)
-        {
-            if (first == null || second == null)
-            {
-                // null == null returns true.
-                // non-null == null returns false.
-                return first == second;
-            }
-            if (ReferenceEquals(first, second))
-            {
-                return true;
-            }
-            if (first.Length != second.Length)
-            {
-                return false;
-            }
-
-            return Util.ArraysEqual(first, second);
-        }
-
-        public override int GetHashCode(byte[] obj)
-        {
-            if (obj == null)
-            {
-                throw new ArgumentNullException(nameof(obj));
-            }
-            if (obj.Length != 16)
-            {
-                throw new ArgumentException("Length must be 16 bytes");
-            }
-
-            ulong hi = BitConverter.ToUInt64(obj, 0);
-            ulong lo = BitConverter.ToUInt64(obj, 8);
-
-            return (hi.GetHashCode() * 397) ^ lo.GetHashCode();
         }
     }
 }

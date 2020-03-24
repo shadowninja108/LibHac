@@ -27,21 +27,22 @@ namespace LibHac.FsService.Creators
             fileSystem = default;
             extraDataAccessor = default;
 
-            string saveDataPath = $"/{saveDataId:x16}";
+            var saveDataPath = $"/{saveDataId:x16}".ToU8String();
 
             Result rc = sourceFileSystem.GetEntryType(out DirectoryEntryType entryType, saveDataPath);
             if (rc.IsFailure())
             {
-                return rc == ResultFs.PathNotFound ? ResultFs.TargetNotFound.LogConverted(rc) : rc;
+                return ResultFs.PathNotFound.Includes(rc) ? ResultFs.TargetNotFound.LogConverted(rc) : rc;
             }
 
             switch (entryType)
             {
                 case DirectoryEntryType.Directory:
-                    // Actual FS does this check
-                    // if (!allowDirectorySaveData) return ResultFs.InvalidSaveDataEntryType.Log();
+                    if (!allowDirectorySaveData) return ResultFs.InvalidSaveDataEntryType.Log();
 
-                    var subDirFs = new SubdirectoryFileSystem(sourceFileSystem, saveDataPath);
+                    rc = SubdirectoryFileSystem.CreateNew(out SubdirectoryFileSystem subDirFs, sourceFileSystem, saveDataPath);
+                    if (rc.IsFailure()) return rc;
+
                     bool isPersistentSaveData = type != SaveDataType.Temporary;
                     bool isUserSaveData = type == SaveDataType.Account || type == SaveDataType.Device;
 
